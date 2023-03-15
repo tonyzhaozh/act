@@ -59,6 +59,7 @@ def main(args):
                          'kl_weight': args['kl_weight'],
                          'hidden_dim': args['hidden_dim'],
                          'dim_feedforward': args['dim_feedforward'],
+                         'history_length': args['history_length'],
                          'lr_backbone': lr_backbone,
                          'backbone': backbone,
                          'enc_layers': enc_layers,
@@ -100,7 +101,7 @@ def main(args):
         print()
         exit()
 
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
+    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, policy_config["history_length"])
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -138,13 +139,18 @@ def make_optimizer(policy_class, policy):
     return optimizer
 
 
-def get_image(ts, camera_names):
+def get_image(ts, camera_names, image_history, history_length):
     curr_images = []
     for cam_name in camera_names:
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
+    if len(image_history) == 0:
+        for _ in range(history_length-1):
+            image_history.append(torch.zeros_like(curr_image).float().cuda())
+    image_history.append(curr_image)
+    curr_image = torch.cat(image_history[-history_length:], dim=1)
     return curr_image
 
 
@@ -220,6 +226,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
+        image_history = []
         qpos_list = []
         target_qpos_list = []
         rewards = []
@@ -241,7 +248,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 qpos = pre_process(qpos_numpy)
                 qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
                 qpos_history[:, t] = qpos
-                curr_image = get_image(ts, camera_names)
+                curr_image = get_image(ts, camera_names, image_history, history_length=policy_config['history_length'])
 
                 ### query policy
                 if config['policy_class'] == "ACT":
@@ -430,6 +437,7 @@ if __name__ == '__main__':
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
+    parser.add_argument('--history_length', action='store', type=int, help='history_length', default=1, required=False)
     parser.add_argument('--temporal_agg', action='store_true')
     
     main(vars(parser.parse_args()))

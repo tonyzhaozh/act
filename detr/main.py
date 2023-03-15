@@ -62,6 +62,7 @@ def get_args_parser():
     parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
     parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
+    parser.add_argument('--history_length', action='store', type=int, help='history_length', default=1, required=False)
     parser.add_argument('--temporal_agg', action='store_true')
 
     return parser

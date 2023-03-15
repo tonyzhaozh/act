@@ -8,13 +8,14 @@ import IPython
 e = IPython.embed
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, history_length):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
+        self.history_length = history_length
         self.__getitem__(0) # initialize self.is_sim
 
     def __len__(self):
@@ -38,7 +39,11 @@ class EpisodicDataset(torch.utils.data.Dataset):
             qvel = root['/observations/qvel'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                image_stack = root[f'/observations/images/{cam_name}'][max(start_ts+1-self.history_length, 0):start_ts+1]
+                if image_stack.shape[0] < self.history_length:
+                    image_stack = np.pad(image_stack, ((self.history_length-image_stack.shape[0], 0), (0, 0), (0, 0), (0, 0)), mode='constant')
+                for i in range(image_stack.shape[0]):
+                    image_dict[f'{cam_name}_{i}'] = image_stack[i]
             # get all actions after and including start_ts
             if is_sim:
                 action = root['/action'][start_ts:]
@@ -56,7 +61,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # new axis for different cameras
         all_cam_images = []
         for cam_name in self.camera_names:
-            all_cam_images.append(image_dict[cam_name])
+            for i in range(self.history_length):
+                all_cam_images.append(image_dict[f'{cam_name}_{i}'])
         all_cam_images = np.stack(all_cam_images, axis=0)
 
         # construct observations
@@ -108,7 +114,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, history_length):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -120,8 +126,8 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, history_length)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, history_length)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
