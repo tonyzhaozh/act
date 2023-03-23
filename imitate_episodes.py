@@ -3,6 +3,7 @@ import numpy as np
 import os
 import pickle
 import argparse
+import json
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from tqdm import tqdm
@@ -108,6 +109,9 @@ def main(args):
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'wb') as f:
         pickle.dump(stats, f)
+    config_path = os.path.join(ckpt_dir, f'recent_model_config.json')
+    with open(config_path, 'w') as f:
+        json.dump(config, f)
 
     best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
     best_epoch, min_val_loss, best_state_dict = best_ckpt_info
