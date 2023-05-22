@@ -1,9 +1,16 @@
 # ACT: Action Chunking with Transformers
 
-### Project Website: https://tonyzhaozh.github.io/aloha/
+### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
+TL;DR: if your ACT policy is jerky or pauses in the middle of an episode, just train for longer! Success rate and smoothness can improve way after loss plateaus.
+
+#### Project Website: https://tonyzhaozh.github.io/aloha/
 
 This repo contains the implementation of ACT, together with 2 simulated environments:
-Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim (tested) or real (ongoing).
+Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim or real.
+For real, you would also need to install [ALOHA](https://github.com/tonyzhaozh/aloha).
+
+### Updates:
+You can find all scripted/human demo for simulated environments [here](https://drive.google.com/drive/folders/1gPR03v05S1xiInoVJn7G7VJ9pDCnxq9O?usp=share_link).
 
 
 ### Repo Structure
@@ -35,7 +42,7 @@ Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim (tes
     pip install einops
     pip install packaging
     pip install h5py
-    pip install h5py_cache
+    pip install ipython
     cd act/detr && pip install -e .
 
 ### Example Usages
@@ -67,15 +74,16 @@ To train ACT:
     --task_name sim_transfer_cube_scripted \
     --ckpt_dir <ckpt dir> \
     --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
+    --num_epochs 2000  --lr 1e-5 \temporal_agg
     --seed 0
 
 
-To evaluate the policy, run the same command but add ``--eval``. The success rate
-should be around 90% for transfer cube, and around 50% for insertion.
+To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
+The success rate should be around 90% for transfer cube, and around 50% for insertion.
+To enable temporal ensembling, add flag ``--temporal_agg``.
 Videos will be saved to ``<ckpt_dir>`` for each rollout.
 You can also add ``--onscreen_render`` to see real-time rendering during evaluation.
 
-
-
+For real-world data where things can be harder to model, train for at least 5000 epochs or 3-4 times the length after the loss has plateaued.
+Please refer to [tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing) for more info.
 
