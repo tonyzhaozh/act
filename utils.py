@@ -3,20 +3,28 @@ import torch
 import os
 import h5py
 from torch.utils.data import TensorDataset, DataLoader
+import time
 
 import IPython
 e = IPython.embed
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, use_speed=False):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
+
+        # dev: speed
+        self.use_speed = use_speed
+
         self.__getitem__(0) # initialize self.is_sim
 
+        # self.is_training = is_training # TODO
+
+    
     def __len__(self):
         return len(self.episode_ids)
 
@@ -59,11 +67,33 @@ class EpisodicDataset(torch.utils.data.Dataset):
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
 
+        # dev: speed
+        if self.use_speed:
+            # uniform sampling from 0.5 to 3 centered in 1
+            speed = sample_speed()
+        else:
+            speed = 1.0
+        
+        if self.use_speed:
+            # print("Speed: ", speed)
+
+            # num query = 200
+            sample_indices = sample_step_indices(120, speed)
+
+            padded_action_sampled = padded_action[sample_indices]
+            is_pad_sampled = is_pad[sample_indices]
+
+        else:
+            padded_action_sampled = padded_action[:120]
+            is_pad_sampled = is_pad[:120]
+
+        speed = torch.from_numpy(np.atleast_1d(speed)).float()
+
         # construct observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
-        action_data = torch.from_numpy(padded_action).float()
-        is_pad = torch.from_numpy(is_pad).bool()
+        action_data = torch.from_numpy(padded_action_sampled).float()
+        is_pad = torch.from_numpy(is_pad_sampled).bool()
 
         # channel last
         image_data = torch.einsum('k h w c -> k c h w', image_data)
@@ -73,7 +103,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
 
-        return image_data, qpos_data, action_data, is_pad
+        
+        return image_data, qpos_data, action_data, is_pad, speed
 
 
 def get_norm_stats(dataset_dir, num_episodes):
@@ -108,7 +139,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, use_speed=False):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -120,13 +151,123 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, use_speed=use_speed)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, use_speed=use_speed)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
     return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
 
+###### dev speed
+
+
+class SpeedDataset(torch.utils.data.Dataset):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, use_speed=False):
+        super(EpisodicDataset).__init__()
+        self.episode_ids = episode_ids
+        self.dataset_dir = dataset_dir
+        self.camera_names = camera_names
+        self.norm_stats = norm_stats
+        self.is_sim = None
+
+        # dev: speed
+        self.use_speed = use_speed
+        assert use_speed, "use_speed must be True"
+
+        self.__getitem__(0) # initialize self.is_sim
+    
+    def __len__(self):
+        return len(self.episode_ids)
+
+    def __getitem__(self, index):
+        sample_full_episode = False # hardcode
+        sample_cnt = 3
+        sample_space = 10
+
+        episode_id = self.episode_ids[index]
+        dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
+
+        if self.use_speed:
+            speed = sample_speed()
+        else:
+            speed = 1.0
+
+        speed_indices = sample_step_indices((sample_cnt - 1) * sample_space + 1, speed)
+        speed_indices = speed_indices[::sample_space][:sample_cnt]
+        speed_ceil = speed_indices[-1]
+
+        # print(f"speed: {speed}, speed_indices: {speed_indices}")
+        assert len(speed_indices) == sample_cnt
+
+        with h5py.File(dataset_path, 'r') as root:
+            is_sim = root.attrs['sim']
+            original_action_shape = root['/action'].shape
+            episode_len = original_action_shape[0]
+            if sample_full_episode:
+                start_ts = 0
+            else:
+                start_ts = np.random.choice(episode_len - speed_ceil) # avoid sampling the last few timesteps
+            
+            speed_indices += start_ts
+            # print(f"start_ts: {start_ts}, speed_indices: {speed_indices}")
+            
+            # get observation at start_ts only
+            qpos = root['/observations/qpos'][speed_indices]
+            image_dict = dict()
+            for cam_name in self.camera_names:
+                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][speed_indices]
+            
+        self.is_sim = is_sim
+
+        # new axis for different cameras
+        all_cam_images = []
+        for cam_name in self.camera_names:
+            all_cam_images.append(image_dict[cam_name])
+        all_cam_images = np.stack(all_cam_images, axis=0)
+
+        
+        speed = torch.from_numpy(np.atleast_1d(speed)).float()
+
+        # construct observations
+        image_data = torch.from_numpy(all_cam_images)
+        qpos_data = torch.from_numpy(qpos).float()
+
+        
+        # channel last
+        image_data = torch.einsum('k n h w c -> k n c h w', image_data)
+
+        assert image_data.shape[0] == len(self.camera_names)
+
+        # normalize image and change dtype to float
+        image_data = (image_data / 255.0).float()
+        qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+
+        # validate shape
+        # print(f"image_data.shape: {image_data.shape}, qpos_data.shape: {qpos_data.shape}")
+
+        return image_data, qpos_data, speed
+
+def load_data_speed(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, use_speed=False):
+    print(f'\nData from: {dataset_dir}\n')
+
+    assert use_speed, "use_speed must be True"
+
+    # obtain train test split
+    train_ratio = 0.8
+    shuffled_indices = np.random.permutation(num_episodes)
+    train_indices = shuffled_indices[:int(train_ratio * num_episodes)]
+    val_indices = shuffled_indices[int(train_ratio * num_episodes):]
+
+    # obtain normalization stats for qpos and action
+    norm_stats = get_norm_stats(dataset_dir, num_episodes)
+
+    # construct dataset and dataloader
+    train_dataset = SpeedDataset(train_indices, dataset_dir, camera_names, norm_stats, use_speed=use_speed)
+    val_dataset = SpeedDataset(val_indices, dataset_dir, camera_names, norm_stats, use_speed=use_speed)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
+
+    return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
 
 ### env utils
 
@@ -187,3 +328,18 @@ def detach_dict(d):
 def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+def sample_step_indices(num, step, start=0):
+    # works for any step size of float
+    indices = np.arange(start, start + num * step, step)
+    if len(indices) > num:
+        indices = indices[:num]
+    assert len(indices) == num
+    return indices.astype(int)
+
+def sample_speed():
+    speed = np.random.normal(1, 0.25)
+    speed = np.clip(speed, 0.5, 1.5)
+    if speed > 1.0:
+        speed = 1.0 + (speed - 1.0) * 4
+    return speed

@@ -71,11 +71,14 @@ class DETRVAE(nn.Module):
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
 
+        # dev
+        self.encoder_speed_proj = nn.Linear(1, hidden_dim) # project speed to embedding
+
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
-        self.additional_pos_embed = nn.Embedding(2, hidden_dim) # learned position embedding for proprio and latent
+        self.additional_pos_embed = nn.Embedding(3, hidden_dim) # learned position embedding for proprio and latent
 
-    def forward(self, qpos, image, env_state, actions=None, is_pad=None):
+    def forward(self, qpos, image, env_state, actions=None, is_pad=None, speed=1.0):
         """
         qpos: batch, qpos_dim
         image: batch, num_cam, channel, height, width
@@ -128,7 +131,11 @@ class DETRVAE(nn.Module):
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
-            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
+
+            # dev: speed
+            speed_input = self.encoder_speed_proj(speed)
+
+            hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight, speed_input)[0]
         else:
             qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)

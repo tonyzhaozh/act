@@ -63,16 +63,33 @@ def get_args_parser():
     parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+    parser.add_argument('--speed', action='store', type=float)
+    parser.add_argument('--use_speed_var', action='store_true', default=False)
+    parser.add_argument('--speed_model', action='store_true', default=False)
+    parser.add_argument('--adjust_speed', action='store_true', default=False)
 
     return parser
 
 
 def build_ACT_model_and_optimizer(args_override):
+    print("building ACT model and optimizer")
+    args = argparse.Namespace()
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
+        print('paring extra args')
 
-    for k, v in args_override.items():
-        setattr(args, k, v)
+        # Add required arguments from args_override to args
+        for arg_name, arg_value in args_override.items():
+            setattr(args, arg_name, arg_value)
+
+    except SystemExit:
+        if args_override:
+            print('continuing with args_override')
+            arg_list = ['--{}={}'.format(key, val) for key, val in args_override.items()]
+            args = parser.parse_args(arg_list)
+        else:
+            raise ValueError('args_override not valid')
 
     model = build_ACT_model(args)
     model.cuda()
@@ -91,11 +108,25 @@ def build_ACT_model_and_optimizer(args_override):
 
 
 def build_CNNMLP_model_and_optimizer(args_override):
+    args = argparse.Namespace()
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
-    args = parser.parse_args()
 
-    for k, v in args_override.items():
-        setattr(args, k, v)
+    try:
+        args = parser.parse_args()
+
+        print('paring extra args')
+
+        # Add required arguments from args_override to args
+        for arg_name, arg_value in args_override.items():
+            setattr(args, arg_name, arg_value)
+
+    except SystemExit:
+        if args_override:
+            print('continuing with args_override')
+            arg_list = ['--{}={}'.format(key, val) for key, val in args_override.items()]
+            args = get_args_parser().parse_args(arg_list)
+        else:
+            raise ValueError('args_override not valid')
 
     model = build_CNNMLP_model(args)
     model.cuda()
