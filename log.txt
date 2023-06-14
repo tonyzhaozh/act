@@ -1,0 +1,19 @@
+eval_arg: 
+
+Data from: /iris/u/davidy02/dataset/sim_transfer_cube_scripted
+
+Using speed
+Speed:  0.9211076250050522
+Original action shape:  (400, 14)
+New action shape:  (400, 14)
+Using speed
+Speed:  1.033165284973017
+Original action shape:  (400, 14)
+New action shape:  (400, 14)
+Making policy: ACT {'lr': 1e-05, 'num_queries': 100, 'kl_weight': 10, 'hidden_dim': 512, 'dim_feedforward': 3200, 'lr_backbone': 1e-05, 'backbone': 'resnet18', 'enc_layers': 4, 'dec_layers': 7, 'nheads': 8, 'camera_names': ['top'], 'speed': 1.0, 'use_speed': True}
+building ACT model and optimizer
+paring extra args
+number of parameters: 83.92M
+KL Weight 10
+
+Epoch 0
