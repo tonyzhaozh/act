@@ -8,11 +8,15 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
 from constants import DT
 from constants import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # data functions
 from utils import sample_box_pose, sample_insertion_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
+from utils import interpolate_by_step, sample_speed, append_results # interpolation dev
 from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
 
@@ -85,14 +89,18 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim
+        'real_robot': not is_sim,
+
+        # interpolation
+        'interpolation_speed': args['interpolation_speed'],
+        'random_interpolation_speed': args['random_interpolation_speed']
     }
 
     if is_eval:
-        ckpt_names = [f'policy_best.ckpt']
+        ckpt_names = [f'policy_last.ckpt']
         results = []
         for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True)
+            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=False) # changed
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -162,6 +170,18 @@ def eval_bc(config, ckpt_name, save_episode=True):
     temporal_agg = config['temporal_agg']
     onscreen_cam = 'angle'
 
+    # interpolation
+    interpolation_speed = config['interpolation_speed']
+    use_random_interpolation_speed = config['random_interpolation_speed']
+
+    assert not (interpolation_speed is not None and use_random_interpolation_speed)
+
+    if interpolation_speed is not None:
+        print('Interpolating using speed', interpolation_speed)
+    if use_random_interpolation_speed:
+        print('Using random interpolation speed')
+
+
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
@@ -190,15 +210,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     query_frequency = policy_config['num_queries']
     if temporal_agg:
-        query_frequency = 1
+        query_frequency = 5
         num_queries = policy_config['num_queries']
 
     max_timesteps = int(max_timesteps * 1) # may increase for real-world tasks
+    org_max_timesteps = max_timesteps
 
-    num_rollouts = 50
+    num_rollouts = 1
     episode_returns = []
     highest_rewards = []
-    for rollout_id in range(num_rollouts):
+    for rollout_id in tqdm(range(num_rollouts)):
         rollout_id += 0
         ### set task
         if 'sim_transfer_cube' in task_name:
@@ -207,6 +228,15 @@ def eval_bc(config, ckpt_name, save_episode=True):
             BOX_POSE[0] = np.concatenate(sample_insertion_pose()) # used in sim reset
 
         ts = env.reset()
+
+
+        ### interpolation
+        if use_random_interpolation_speed:
+            interpolation_speed = sample_speed()
+            print("Interpolation speed:", interpolation_speed)
+
+        if interpolation_speed is not None:
+            max_timesteps = int(org_max_timesteps * 1.0 / interpolation_speed + 1e-8)
 
         ### onscreen render
         if onscreen_render:
@@ -217,6 +247,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
         ### evaluation loop
         if temporal_agg:
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
+
 
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
@@ -247,8 +278,13 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
                         all_actions = policy(qpos, curr_image)
+                        checkpoint_t = t
+
+                        if interpolation_speed is not None:
+                            all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+
                     if temporal_agg:
-                        all_time_actions[[t], t:t+num_queries] = all_actions
+                        all_time_actions[[t], checkpoint_t: checkpoint_t + all_actions.shape[1]] = all_actions
                         actions_for_curr_step = all_time_actions[:, t]
                         actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
                         actions_for_curr_step = actions_for_curr_step[actions_populated]
@@ -285,12 +321,26 @@ def eval_bc(config, ckpt_name, save_episode=True):
         rewards = np.array(rewards)
         episode_return = np.sum(rewards[rewards!=None])
         episode_returns.append(episode_return)
-        episode_highest_reward = np.max(rewards)
+        episode_highest_reward = np.max(rewards[rewards!=None])
         highest_rewards.append(episode_highest_reward)
-        print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {episode_highest_reward==env_max_reward}')
+        is_success = episode_highest_reward==env_max_reward
+        print(f'Rollout {rollout_id}\n{episode_return=}, {episode_highest_reward=}, {env_max_reward=}, Success: {is_success}')
 
         if save_episode:
-            save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
+            if interpolation_speed is None:
+                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video{rollout_id}.mp4'))
+            else:
+                interpolation_speed_formatted = "{:.4f}".format(interpolation_speed) 
+                save_videos(image_list, DT, video_path=os.path.join(ckpt_dir, f'video_speed_{interpolation_speed_formatted}_id{rollout_id}_{is_success}.mp4'))
+        
+        if interpolation_speed is not None:
+            interpolation_speed_formatted = "{:.4f}".format(interpolation_speed) 
+            append_results({
+                'speed': interpolation_speed_formatted, 
+                'success': 1 if is_success else 0,
+                'id': rollout_id
+            }, os.path.join(ckpt_dir,'speed_result.json'))
+
 
     success_rate = np.mean(np.array(highest_rewards) == env_max_reward)
     avg_return = np.mean(episode_returns)
@@ -431,5 +481,9 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+
+    # for interpolation
+    parser.add_argument('--interpolation_speed', action='store', type=float, required=False)
+    parser.add_argument('--random_interpolation_speed', action='store_true', default=False, required=False)
     
     main(vars(parser.parse_args()))

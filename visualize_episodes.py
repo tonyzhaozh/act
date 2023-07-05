@@ -26,6 +26,7 @@ def load_hdf5(dataset_dir, dataset_name):
         action = root['/action'][()]
         image_dict = dict()
         for cam_name in root[f'/observations/images/'].keys():
+            print(cam_name)
             image_dict[cam_name] = root[f'/observations/images/{cam_name}'][()]
 
     return qpos, qvel, action, image_dict

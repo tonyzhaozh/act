@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import os
+import json
 import h5py
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -187,3 +188,90 @@ def detach_dict(d):
 def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+
+def interpolate_by_step(raw, step, max_length = None, with_batch = True):
+    # raw: numpy array of shape (N, 14)
+    # step: a positive real number signifying the step length
+    # interpolate the raw data of shape (14, )
+    if step < 1e-8:
+        raise ValueError('Invalid step size')
+
+    if with_batch:
+        assert raw.shape[0] == 1
+        raw = raw.squeeze(0)
+
+    if isinstance(raw, list):
+        raw = torch.tensor(raw)
+    elif isinstance(raw, np.ndarray):
+        raw = torch.from_numpy(raw)
+    elif isinstance(raw, torch.Tensor):
+        raw = raw.cpu()  # Move tensor from GPU to CPU
+
+    n = raw.shape[0]  # Number of rows in raw data
+
+    out = []
+    cnt = 0.0
+    while cnt < n - 1 + 1e-8:
+        start_idx = int(cnt)
+        end_idx = min(start_idx + 1, n - 1)
+
+        start_point = raw[start_idx]
+        end_point = raw[end_idx]
+
+        fraction = cnt - start_idx
+        interpolated_point = start_point + fraction * (end_point - start_point)
+
+        out.append(interpolated_point)
+        cnt += step
+
+        if max_length != None and len(out) >= max_length:
+            break
+
+    out_tensor = torch.stack(out)  # Stack the list of tensors into a single tensor
+
+    if isinstance(raw, torch.Tensor):
+        out_tensor = out_tensor.cuda()  # Move output back to the same device
+    
+    if with_batch:
+        out_tensor = out_tensor.unsqueeze(0)
+    
+    return out_tensor
+
+
+def sample_speed(minVal = 0.1, maxVal = 10.0):
+    rand_num = np.random.uniform(0, 1)
+
+    if rand_num < 0.5:
+        return np.random.uniform(minVal, 1)
+    else:
+        return np.random.uniform(1, maxVal)
+
+def append_results(entry, filename):
+    #  Check if the file exists
+    if not os.path.exists(filename):
+        # File does not exist, create it with an empty list
+        with open(filename, 'w') as file:
+            json.dump([], file)
+
+    # Read the existing data from the file
+    try:
+        with open(filename, 'r') as file:
+            existing_data = json.load(file)
+    except:
+        with open(filename, 'w') as file:
+            json.dump([], file)
+        existing_data = []
+
+    # Append the new entry to the existing data
+    existing_data.append(entry)
+
+    # Write the updated data back to the file
+    with open(filename, 'w') as file:
+        json.dump(existing_data, file)
+
+
+# testing purpose
+if __name__=="__main__":
+    print("This file should not be run directly")
+    pass

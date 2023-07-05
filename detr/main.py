@@ -64,6 +64,11 @@ def get_args_parser():
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
 
+    # for interpolation (not used)
+    parser.add_argument('--interpolation_speed', action='store', type=float, required=False)
+    parser.add_argument('--random_interpolation_speed', action='store_true', default=False, required=False)
+
+
     return parser
 
 
