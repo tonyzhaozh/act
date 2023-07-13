@@ -1,0 +1,86 @@
+# start the system
+conda deactivate
+source /opt/ros/noetic/setup.sh && source ~/interbotix_ws/devel/setup.sh
+roslaunch aloha 4arms_teleop.launch
+
+conda activate aloha
+cd ~/interbotix_ws/src/aloha/aloha_scripts
+source /opt/ros/noetic/setup.sh && source ~/interbotix_ws/devel/setup.sh
+python3 one_side_teleop.py right
+
+conda activate aloha
+cd ~/interbotix_ws/src/aloha/aloha_scripts
+source /opt/ros/noetic/setup.sh && source ~/interbotix_ws/devel/setup.sh
+python3 one_side_teleop.py left
+
+
+conda activate aloha
+cd ~/interbotix_ws/src/aloha/aloha_scripts
+python3 sleep.py
+
+
+
+
+# pingpong baseline
+launcha
+python imitate_episodes.py \
+--task_name aloha_pingpong_test \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_pingpong_new \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
+--num_epochs 4000  --lr 1e-5 \
+--seed 0 --temporal_agg --interpolation_speed 4.6 --eval
+
+python visualize_episodes.py \
+--dataset_dir /scr2/tonyzhao/datasets/aloha_pingpong_test \
+--episode_idx 0
+
+python3 replay_episodes.py --dataset_dir /scr2/tonyzhao/datasets/aloha_pingpong_test --episode_idx 0
+
+# towel baseline
+launcha
+python imitate_episodes.py \
+--task_name aloha_towel \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_towel_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 4000  --lr 1e-5 \
+--seed 0 --eval --temporal_agg
+
+
+# sim box baseline and random speed
+conda activate aloha
+cd ~/interbotix_ws/src/act
+python imitate_episodes.py \
+--task_name sim_transfer_cube_scripted \
+--ckpt_dir /scr2/davidyuan/train_logs/sim_cube_transfer_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 2000  --lr 1e-5 \
+--seed 0 --temporal_agg --random_interpolation_speed --eval
+
+
+# sim box baseline and fixed speed
+conda activate aloha
+cd ~/interbotix_ws/src/act
+python imitate_episodes.py \
+--task_name sim_transfer_cube_scripted \
+--ckpt_dir /scr2/davidyuan/train_logs/sim_cube_transfer_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 2000  --lr 1e-5 \
+--seed 0 --temporal_agg --interpolation_speed 0.3 --eval
+
+
+
+
+# threading:
+
+python imitate_episodes.py \
+--task_name sim_transfer_cube_scripted \
+--ckpt_dir /scr2/davidyuan/train_logs/sim_cube_transfer_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 2000  --lr 1e-5 --seed 0 --temporal_agg --eval --multi_thread
+
+python imitate_episodes.py \
+--task_name aloha_towel \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_towel_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 4000  --lr 1e-5 \
+--seed 0 --eval --temporal_agg --multi_thread
