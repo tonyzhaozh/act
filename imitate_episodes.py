@@ -22,6 +22,10 @@ from visualize_episodes import save_videos
 
 from sim_env import BOX_POSE
 
+import ray
+from ray.util.queue import Queue
+import time
+
 import IPython
 e = IPython.embed
 
@@ -93,7 +97,10 @@ def main(args):
 
         # interpolation
         'interpolation_speed': args['interpolation_speed'],
-        'random_interpolation_speed': args['random_interpolation_speed']
+        'random_interpolation_speed': args['random_interpolation_speed'],
+
+        # multi-threading
+        'use_multi_thread': args['multi_thread'],
     }
 
     if is_eval:
@@ -146,14 +153,51 @@ def make_optimizer(policy_class, policy):
     return optimizer
 
 
-def get_image(ts, camera_names):
+'''def get_image(ts, camera_names):
     curr_images = []
     for cam_name in camera_names:
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
+    return curr_image'''
+
+def get_image(ts, camera_names):
+    num_cameras = len(camera_names)
+    image_shape = ts.observation['images'][camera_names[0]].shape
+
+    curr_image = np.empty((num_cameras,) + image_shape, dtype=np.float32)
+    for i, cam_name in enumerate(camera_names):
+        curr_image[i] = ts.observation['images'][cam_name]
+        
+    curr_image = curr_image.transpose(0, 3, 1, 2)
+
+    curr_image = torch.from_numpy(curr_image / 255.0).float().unsqueeze(0)
     return curr_image
+
+
+################################
+
+ray.init()
+
+@ray.remote(num_gpus=0.1)
+class PolicyLoop:
+    def __init__(self, policy, input_queue, action_queue):
+        self.input_queue = input_queue
+        self.action_queue = action_queue
+        self.policy = policy  # Replace with your AI model initialization
+
+    def run(self):
+        while True:
+            input = self.input_queue.get()
+            t = input['t']
+            obs = input['obs'].cuda()
+            qpos = input['qpos'].cuda()
+            action = self.policy(qpos, obs)
+            self.action_queue.put({'t': t, 'action': action.cpu()})
+
+
+################################
 
 
 def eval_bc(config, ckpt_name, save_episode=True):
@@ -173,6 +217,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
     # interpolation
     interpolation_speed = config['interpolation_speed']
     use_random_interpolation_speed = config['random_interpolation_speed']
+
+    # multi-threading
+    use_multi_thread = config['use_multi_thread']
 
     assert not (interpolation_speed is not None and use_random_interpolation_speed)
 
@@ -196,6 +243,19 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
+
+    # multi-threading
+    if use_multi_thread:
+        ray.put(policy)
+
+        # Create the communication queues
+        input_queue = Queue()
+        action_queue = Queue()
+
+        # Start the robot AI loop actor
+        for _ in range(2):
+            policy_loop = PolicyLoop.remote(policy, input_queue, action_queue)
+            policy_loop.run.remote()
 
     # load environment
     if real_robot:
@@ -249,11 +309,21 @@ def eval_bc(config, ckpt_name, save_episode=True):
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
 
 
+        ### multi-threading
+        if use_multi_thread:
+            task_ref_list = []
+
         qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
         rewards = []
+
+        ### timing
+        start_time = time.time()
+        initial_time = None
+        delta_time = 0
+
         with torch.inference_mode():
             for t in range(max_timesteps):
                 ### update onscreen render and wait for DT
@@ -264,37 +334,107 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
                 ### process previous timestep to get qpos and image_list
                 obs = ts.observation
-                if 'images' in obs:
+
+                '''if 'images' in obs:
                     image_list.append(obs['images'])
                 else:
-                    image_list.append({'main': obs['image']})
-                qpos_numpy = np.array(obs['qpos'])
-                qpos = pre_process(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
-                qpos_history[:, t] = qpos
+                    image_list.append({'main': obs['image']})'''
+                
+                #qpos_numpy = np.array(obs['qpos'])
+                #qpos = pre_process(qpos_numpy)
+                qpos = pre_process(obs['qpos'])
+                qpos = torch.from_numpy(qpos).float().unsqueeze(0)
+                # qpos_history[:, t] = qpos
                 curr_image = get_image(ts, camera_names)
 
                 ### query policy
                 if config['policy_class'] == "ACT":
-                    if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image)
-                        checkpoint_t = t
+                    if not use_multi_thread:
+                        qpos = qpos.cuda()
+                        curr_image = curr_image.cuda()
+                        policy_time1 = time.time()
 
-                        if interpolation_speed is not None:
-                            all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+                        if t % query_frequency == 0:
+                            checkpoint_t = t
+                            all_actions = policy(qpos, curr_image)
 
-                    if temporal_agg:
-                        all_time_actions[[t], checkpoint_t: checkpoint_t + all_actions.shape[1]] = all_actions
+                            if interpolation_speed is not None:
+                                all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+
+                        policy_time2 = time.time()
+
+                        if temporal_agg:
+                            all_time_actions[[t], checkpoint_t: checkpoint_t + all_actions.shape[1]] = all_actions
+                            actions_for_curr_step = all_time_actions[:, t]
+                            actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
+                            actions_for_curr_step = actions_for_curr_step[actions_populated]
+                            k = 0.01
+                            exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
+                            exp_weights = exp_weights / exp_weights.sum()
+                            exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1)
+                            raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
+                        else:
+                            raw_action = all_actions[:, t % query_frequency]
+
+                        policy_time3 = time.time()
+                    else:
+                        assert temporal_agg
+
+                        policy_time1 = time.time()
+
+                        if t % query_frequency == 0:
+                            checkpoint_t = t
+                            input_queue.put({'qpos': qpos, 'obs': curr_image, 't': t})
+                            print('Put qpos for t:', t)
+                        '''if input_queue.qsize() < 1:
+                            input_queue.put({'qpos': qpos, 'obs': curr_image, 't': t})'''
+
+                        policy_time2 = time.time()
+                        
+                        while action_queue.qsize() > 0:
+                            if initial_time is None:
+                                initial_time = time.time()
+
+                            res_dict = action_queue.get()
+                            t_prime = res_dict['t']
+                            all_actions = res_dict['action'].cuda()
+
+                            if interpolation_speed is not None:
+                                all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+                            
+                            all_time_actions[[t_prime], t_prime: t_prime + all_actions.shape[1]] = all_actions
+                        
                         actions_for_curr_step = all_time_actions[:, t]
                         actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
                         actions_for_curr_step = actions_for_curr_step[actions_populated]
+                        
+                        if actions_for_curr_step.shape[0] == 0:
+                            res_dict = action_queue.get()
+                            t_prime = res_dict['t']
+                            all_actions = res_dict['action'].cuda()
+
+                            print('Got action for t_prime:', t_prime)
+
+                            if interpolation_speed is not None:
+                                all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+                            
+                            all_time_actions[[t_prime], t_prime: t_prime + all_actions.shape[1]] = all_actions
+                        
+                            actions_for_curr_step = all_time_actions[:, t]
+                            actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
+                            actions_for_curr_step = actions_for_curr_step[actions_populated]
+                        
+                        assert actions_for_curr_step.shape[0] > 0
+
                         k = 0.01
                         exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
                         exp_weights = exp_weights / exp_weights.sum()
                         exp_weights = torch.from_numpy(exp_weights).cuda().unsqueeze(dim=1)
                         raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
-                    else:
-                        raw_action = all_actions[:, t % query_frequency]
+
+                        policy_time3 = time.time()
+
+
                 elif config['policy_class'] == "CNNMLP":
                     raw_action = policy(qpos, curr_image)
                 else:
@@ -305,15 +445,61 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 action = post_process(raw_action)
                 target_qpos = action
 
-                ### step the environment
-                ts = env.step(target_qpos)
-
                 ### for visualization
-                qpos_list.append(qpos_numpy)
+                qpos_list.append(qpos)
                 target_qpos_list.append(target_qpos)
                 rewards.append(ts.reward)
 
+                mid_time = time.time()
+
+                ### step the environment
+                if (t + 1) % query_frequency != 0:
+                    ts = env.step(
+                        target_qpos, 
+                        no_sleep= t % query_frequency == 0, 
+                        sleep_time= (
+                            max(0, 0.0195-(mid_time - start_time)) 
+                        )
+                    )
+                else:
+                    ts = env.step(
+                        target_qpos, 
+                        no_sleep= t % query_frequency == 0, 
+                        sleep_time= (
+                            min(0.0195, max(0.005, 0.0195 - delta_time - (mid_time - start_time))) 
+                        )
+                    )
+                    if delta_time > 0:
+                        delta_time = 0
+
+                #ts = env.step(target_qpos, no_sleep= True)
+
+            
+                ### timing
+                end_time = time.time()
+                time_elapsed = (end_time - start_time) * 1000
+
+                timer1 = (policy_time1 - start_time) * 1000
+
+                policy_inference_time = (policy_time2 - policy_time1) * 1000
+                policy_arrange_time = (policy_time3 - policy_time2) * 1000
+
+                print(f"Time elapsed: {time_elapsed:.4f} ms || timer1: {timer1:.4f} ms || policy inf: {policy_inference_time:.4f} ms || policy arrange time: {policy_arrange_time:.4f} ms")
+
+                delta_time += (end_time - start_time) - 0.02
+
+                start_time = time.time()
+
+                
+
             plt.close()
+
+        finish_time = time.time()
+        print(f"Total time: {(finish_time - initial_time) * 1000:.4f} ms")
+
+        # fps
+        print(f"FPS: {max_timesteps / (finish_time - initial_time):.4f}")
+
         if real_robot:
             move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
             pass
@@ -485,5 +671,8 @@ if __name__ == '__main__':
     # for interpolation
     parser.add_argument('--interpolation_speed', action='store', type=float, required=False)
     parser.add_argument('--random_interpolation_speed', action='store_true', default=False, required=False)
+
+    # multi-threading
+    parser.add_argument('--multi_thread', action='store_true', default=False, required=False)
     
     main(vars(parser.parse_args()))

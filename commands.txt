@@ -28,7 +28,7 @@ python imitate_episodes.py \
 --ckpt_dir /scr2/tonyzhao/train_logs/aloha_pingpong_new \
 --policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3200 \
 --num_epochs 4000  --lr 1e-5 \
---seed 0 --temporal_agg --interpolation_speed 3.65 --eval
+--seed 0 --temporal_agg --interpolation_speed 4.6 --eval
 
 python visualize_episodes.py \
 --dataset_dir /scr2/tonyzhao/datasets/aloha_pingpong_test \
@@ -66,3 +66,21 @@ python imitate_episodes.py \
 --policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
 --num_epochs 2000  --lr 1e-5 \
 --seed 0 --temporal_agg --interpolation_speed 0.3 --eval
+
+
+
+
+# threading:
+
+python imitate_episodes.py \
+--task_name sim_transfer_cube_scripted \
+--ckpt_dir /scr2/davidyuan/train_logs/sim_cube_transfer_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 2000  --lr 1e-5 --seed 0 --temporal_agg --eval --multi_thread
+
+python imitate_episodes.py \
+--task_name aloha_towel \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_towel_baseline \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs 4000  --lr 1e-5 \
+--seed 0 --eval --temporal_agg --multi_thread

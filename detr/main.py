@@ -68,6 +68,10 @@ def get_args_parser():
     parser.add_argument('--interpolation_speed', action='store', type=float, required=False)
     parser.add_argument('--random_interpolation_speed', action='store_true', default=False, required=False)
 
+    # for multi-threading (not used)
+    parser.add_argument('--multi_thread', action='store_true', default=False, required=False)
+
+
 
     return parser
 
