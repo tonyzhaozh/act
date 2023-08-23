@@ -33,7 +33,7 @@ def get_sinusoid_encoding_table(n_position, d_hid):
 
 class DETRVAE(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names):
+    def __init__(self, backbones, transformer, encoder, latent_dim, a_dim, state_dim, num_queries, camera_names):
         """ Initializes the model.
         Parameters:
             backbones: torch module of the backbone to be used. See backbone.py
@@ -44,7 +44,9 @@ class DETRVAE(nn.Module):
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
         """
         super().__init__()
-        self.action_dim = 7 # TODO hardcoded
+        self.action_dim = a_dim
+        self.latent_dim = latent_dim
+        self.state_dim = state_dim
 
         self.num_queries = num_queries
         self.camera_names = camera_names
@@ -61,12 +63,12 @@ class DETRVAE(nn.Module):
         else:
             # input_dim = 14 + 7 # robot_state + env_state
             self.input_proj_robot_state = nn.Linear(state_dim, hidden_dim)
-            self.input_proj_env_state = nn.Linear(10, hidden_dim) # hardcoded env state has 10 dims
+            self.input_proj_env_state = nn.Linear(10, hidden_dim) # TODO not used in robomimic
             self.pos = torch.nn.Embedding(2, hidden_dim)
             self.backbones = None
 
         # encoder extra parameters
-        self.latent_dim = 32 # final size of latent z # TODO tune
+        self.latent_dim = self.latent_dim  # final size of latent z # TODO tune
         self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
         self.encoder_action_proj = nn.Linear(self.action_dim, hidden_dim) # project action to embedding
         self.encoder_joint_proj = nn.Linear(state_dim, hidden_dim)  # project qpos to embedding
@@ -229,7 +231,6 @@ def build_encoder(args):
 
 
 def build(args):
-    state_dim = 9 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets
@@ -246,7 +247,9 @@ def build(args):
         backbones,
         transformer,
         encoder,
-        state_dim=state_dim,
+        latent_dim=args.latent_dim,
+        a_dim=args.a_dim,
+        state_dim=args.state_dim,
         num_queries=args.num_queries,
         camera_names=args.camera_names,
     )

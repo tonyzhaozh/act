@@ -52,6 +52,13 @@ def get_args_parser():
     parser.add_argument('--masks', action='store_true',
                         help="Train segmentation head if the flag is provided")
 
+    parser.add_argument('--a_dim', default=-1, type=float,
+                        help="Action dim")
+    parser.add_argument('--latent_dim', default=-1, type=float,
+                        help="Latent dim")
+    parser.add_argument('--state_dim', default=-1, type=float,
+                        help="State dim")
+
     return parser
 
 
