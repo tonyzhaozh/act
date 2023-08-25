@@ -1,0 +1,97 @@
+<mujoco>
+    <include file="scene.xml"/>
+    <include file="vx300s_dependencies.xml"/>
+    <worldbody>
+        <include file="vx300s_left.xml" />
+        <include file="vx300s_right.xml" />
+        <!--
+        <body name="box" pos="0.2 0.5 0.05">
+            <joint name="red_box_joint" type="free" frictionloss="0.01" />
+            <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.002" />
+            <geom condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1 0.005 0.0001" pos="0 0 0" size="0.02 0.02 0.02" type="box" name="red_box" rgba="1 0 0 1" />
+        </body>
+        -->
+
+        <body name="cup" pos="-0.1 0.6 0" >
+            <geom name="cup_base" pos="0 0 0" size="0.04 0.04 0.005" rgba="0 0.7 0 1" type="box" />
+            <geom pos="0.045 0. 0.04" size="0.005 0.05 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="-0.045 0. 0.04" size="0.005 0.05 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="0 0.045 0.04" size="0.05 0.005 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="0 -0.045 0.04" size="0.05 0.005 0.04" rgba="0 0.5 0 0.3" type="box" />
+        </body>
+
+        <body name="box" pos="0.0 0.5 0.02" >
+			<joint axis="0 1 0"  name="red_box_joint" pos="0 0 0" range="-100 100" type="free"/>
+            <inertial pos="0 0 0" mass="0.03" diaginertia="0.002 0.002 0.002" />
+			<geom name="red_box" friction="2 0.1 0.1" pos="0 0 0" quat="0.707 0.707 0.707 0.707" size="0.012 0.012 0.012" rgba="1 0 0 1" type="box"/>
+			<body name="pole1" pos="0 0 0.012">
+				<joint name="ball1" pos="0 0 0" type="ball" limited="false"/>
+                <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+				<geom fromto="0 0 0 0.01 0.001 0.02" name="cpole1" rgba="0 0.7 0.7 1" size="0.002 0.1" type="capsule"/>
+				<body name="pole2" pos="0.01 0 0.02">
+					<joint name="ball2" type="ball" pos="0 0 0" />
+                    <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+					<geom name="cpole2" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.1" rgba="0.7 0 0.7 1"/>
+					<body name="pole3" pos="0.01 0 0.02">
+						<joint name="ball3" type="ball" pos="0 0 0" />
+                        <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+						<geom name="cpole3" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+						<body name="pole4" pos="0.01 0 0.02">
+							<joint name="ball4" type="ball" pos="0 0 0" />
+                            <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+							<geom name="cpole4" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0.7 1"/>
+							<body name="pole5" pos="0.01 0 0.02">
+								<joint name="ball5" type="ball" pos="0 0 0" />
+                                <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+								<geom name="cpole5" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+								<body name="pole6" pos="0.01 0 0.02">
+                                    <joint name="ball6" type="ball" pos="0 0 0" />
+                                    <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+                                    <geom name="cpole6" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0.7 1"/>
+                                    <body name="pole7" pos="0.01 0 0.02">
+                                        <joint name="ball7" type="ball" pos="0 0 0" />
+                                        <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+                                        <geom name="cpole7" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+                                        <body name="end_box" pos="0.01 0 0.02">
+                                            <joint name="tea_bag_joint" type="ball" pos="0 0 0" />
+                                            <inertial pos="0 0 0" mass="0.1" diaginertia="0.0005 0.0005 0.001" />
+                                            <geom name="tea_bag" type="box" size="0.02 0.02 0.02" rgba="0.7 0.7 0 1" />
+                                        </body>
+                                    </body>
+                                </body>
+							</body>
+						</body>
+					</body>
+				</body>
+			</body>
+		</body>
+
+    </worldbody>
+
+    <actuator>
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_left/waist" kp="800"  user="1" forcelimited="true" forcerange="-150 150"/>
+        <position ctrllimited="true" ctrlrange="-1.85005 1.25664" joint="vx300s_left/shoulder" kp="1600"  user="1" forcelimited="true" forcerange="-300 300"/>
+        <position ctrllimited="true" ctrlrange="-1.76278 1.6057" joint="vx300s_left/elbow" kp="800"  user="1" forcelimited="true" forcerange="-100 100"/>
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_left/forearm_roll" kp="10"  user="1" forcelimited="true" forcerange="-100 100"/>
+        <position ctrllimited="true" ctrlrange="-1.8675 2.23402" joint="vx300s_left/wrist_angle" kp="50"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_left/wrist_rotate" kp="20"  user="1"/>
+        <position ctrllimited="true" ctrlrange="0.021 0.057" joint="vx300s_left/left_finger" kp="200"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-0.057 -0.021" joint="vx300s_left/right_finger" kp="200"  user="1"/>
+
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_right/waist" kp="800"  user="1" forcelimited="true" forcerange="-150 150"/>
+        <position ctrllimited="true" ctrlrange="-1.85005 1.25664" joint="vx300s_right/shoulder" kp="1600"  user="1" forcelimited="true" forcerange="-300 300"/>
+        <position ctrllimited="true" ctrlrange="-1.76278 1.6057" joint="vx300s_right/elbow" kp="800"  user="1" forcelimited="true" forcerange="-100 100"/>
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_right/forearm_roll" kp="10"  user="1" forcelimited="true" forcerange="-100 100"/>
+        <position ctrllimited="true" ctrlrange="-1.8675 2.23402" joint="vx300s_right/wrist_angle" kp="50"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="vx300s_right/wrist_rotate" kp="20"  user="1"/>
+        <position ctrllimited="true" ctrlrange="0.021 0.057" joint="vx300s_right/left_finger" kp="200"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-0.057 -0.021" joint="vx300s_right/right_finger" kp="200"  user="1"/>
+
+    </actuator>
+
+    <keyframe>
+        <key qpos='-0.000101626 0.0184755 0.0326304 0.00135401 0.124411 -0.00243236 -0.00199679 0.00199705 -0.000129709 -0.0151888 -0.0258941 0.000424047 -0.123536 0.00137897 -0.0020761 0.0019178 -0.0941967 0.499856 0.019661 0.999987 -5.31538e-05 1.77163e-05 0.00515626 0.787793 0.00788745 0.615828 -0.00865379 0.824494 -0.0903066 0.555992 -0.0541016 0.894481 0.077084 -0.435598 0.0649266 0.96887 -0.00631955 -0.247487 0.0010544 0.999999 0.000805304 0.000269663 -0.00149195 0.999995 -0.00235536 -0.000869696 0.00188278 0.984044 0.00313481 -0.177855 -0.00387491 0.929912 0.0140362 -0.365209 -0.0410912'/>
+    </keyframe>
+
+
+</mujoco>

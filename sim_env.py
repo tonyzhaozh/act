@@ -47,6 +47,12 @@ def make_sim_env(task_name):
         task = InsertionTask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
+    if 'sim_transfer_tea_bag' in task_name:
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_transfer_tea_bag.xml')
+        physics = mujoco.Physics.from_xml_path(xml_path)
+        task = TransferTeaBagTask(random=False)
+        env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
+                                  n_sub_steps=None, flat_observation=False)
     else:
         raise NotImplementedError
     return env
@@ -229,6 +235,54 @@ class InsertionTask(BimanualViperXTask):
         return reward
 
 
+class TransferTeaBagTask(BimanualViperXTask):
+    def __init__(self, random=None):
+        super().__init__(random=random)
+        self.max_reward = 3
+
+    def initialize_episode(self, physics):
+        """Sets the state of the environment at the start of each episode."""
+        # TODO Notice: this function does not randomize the env configuration. Instead, set BOX_POSE from outside
+        # reset qpos, control and box position
+        with physics.reset_context():
+            physics.named.data.qpos[:16] = START_ARM_POSE
+            np.copyto(physics.data.ctrl, START_ARM_POSE)
+            assert BOX_POSE[0] is not None
+            physics.named.data.qpos[16:] = BOX_POSE[0]
+            # print(f"{BOX_POSE=}")
+        super().initialize_episode(physics)
+
+    @staticmethod
+    def get_env_state(physics):
+        env_state = physics.data.qpos.copy()[16:]
+        return env_state
+
+    def get_reward(self, physics):
+        # return whether left gripper is holding the box
+        all_contact_pairs = []
+        for i_contact in range(physics.data.ncon):
+            id_geom_1 = physics.data.contact[i_contact].geom1
+            id_geom_2 = physics.data.contact[i_contact].geom2
+            name_geom_1 = physics.model.id2name(id_geom_1, 'geom')
+            name_geom_2 = physics.model.id2name(id_geom_2, 'geom')
+            contact_pair = (name_geom_1, name_geom_2)
+            all_contact_pairs.append(contact_pair)
+
+        touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
+        touch_table = ("tea_bag", "table") in all_contact_pairs or ("red_box", "table") in all_contact_pairs
+        touch_cup_base = ("cup_base", "tea_bag") in all_contact_pairs
+
+
+        reward = 0
+        if touch_right_gripper:
+            reward = 1
+        if touch_right_gripper and not touch_table: # lifted
+            reward = 2
+        if touch_cup_base:
+            reward = 3
+        return reward
+
+
 def get_action(master_bot_left, master_bot_right):
     action = np.zeros(14)
     # arm action
@@ -256,7 +310,7 @@ def test_sim_teleop():
                                               robot_name=f'master_right', init_node=False)
 
     # setup the environment
-    env = make_sim_env('sim_transfer_cube')
+    env = make_sim_env('sim_transfer_tea_bag')
     ts = env.reset()
     episode = [ts]
     # setup plotting

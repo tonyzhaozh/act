@@ -30,6 +30,14 @@ SIM_TASK_CONFIGS = {
         'episode_len': 500,
         'camera_names': ['top']
     },
+
+    'sim_transfer_tea_bag_scripted':{
+        'dataset_dir': DATA_DIR + '/sim_transfer_tea_bag_scripted',
+        'num_episodes': 50,
+        'episode_len': 500,
+        'camera_names': ['top']
+    },
+
 }
 
 ### Simulation envs fixed constants

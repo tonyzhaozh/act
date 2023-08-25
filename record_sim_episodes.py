@@ -8,7 +8,7 @@ import h5py
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN, SIM_TASK_CONFIGS
 from ee_sim_env import make_ee_sim_env
 from sim_env import make_sim_env, BOX_POSE
-from scripted_policy import PickAndTransferPolicy, InsertionPolicy
+from scripted_policy import PickAndTransferPolicy, InsertionPolicy, PickAndTransferTeaBagPolicy
 
 import IPython
 e = IPython.embed
@@ -39,6 +39,8 @@ def main(args):
         policy_cls = PickAndTransferPolicy
     elif task_name == 'sim_insertion_scripted':
         policy_cls = InsertionPolicy
+    elif task_name == 'sim_transfer_tea_bag_scripted':
+        policy_cls = PickAndTransferTeaBagPolicy
     else:
         raise NotImplementedError
 
@@ -92,6 +94,7 @@ def main(args):
         print('Replaying joint commands')
         env = make_sim_env(task_name)
         BOX_POSE[0] = subtask_info # make sure the sim_env has the same object configurations as ee_sim_env
+
         ts = env.reset()
 
         episode_replay = [ts]

@@ -1,0 +1,103 @@
+<mujoco>
+    <include file="scene.xml"/>
+    <include file="vx300s_dependencies.xml"/>
+
+    <equality>
+        <weld body1="mocap_left" body2="vx300s_left/gripper_link" solref="0.01 1" solimp=".25 .25 0.001" />
+        <weld body1="mocap_right" body2="vx300s_right/gripper_link" solref="0.01 1" solimp=".25 .25 0.001" />
+    </equality>
+
+    <worldbody>
+        <include file="vx300s_left.xml" />
+        <include file="vx300s_right.xml" />
+
+        <body mocap="true" name="mocap_left" pos="0.095 0.50 0.425">
+            <site pos="0 0 0" size="0.003 0.003 0.03" type="box" name="mocap_left_site1" rgba="1 0 0 1"/>
+            <site pos="0 0 0" size="0.003 0.03 0.003" type="box" name="mocap_left_site2" rgba="1 0 0 1"/>
+            <site pos="0 0 0" size="0.03 0.003 0.003" type="box" name="mocap_left_site3" rgba="1 0 0 1"/>
+        </body>
+        <body mocap="true" name="mocap_right" pos="-0.095 0.50 0.425">
+            <site pos="0 0 0" size="0.003 0.003 0.03" type="box" name="mocap_right_site1" rgba="1 0 0 1"/>
+            <site pos="0 0 0" size="0.003 0.03 0.003" type="box" name="mocap_right_site2" rgba="1 0 0 1"/>
+            <site pos="0 0 0" size="0.03 0.003 0.003" type="box" name="mocap_right_site3" rgba="1 0 0 1"/>
+        </body>
+
+        <!--
+        <body name="box" pos="0.2 0.5 0.05">
+            <joint name="red_box_joint" type="free" frictionloss="0.01" />
+            <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.002" />
+            <geom condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1 0.005 0.0001" pos="0 0 0" size="0.02 0.02 0.02" type="box" name="red_box" rgba="1 0 0 1" />
+        </body>
+        -->
+
+        <body name="cup" pos="-0.1 0.6 0" >
+            <geom name="cup_base" pos="0 0 0" size="0.04 0.04 0.005" rgba="0 0.7 0 1" type="box" />
+            <geom pos="0.045 0. 0.04" size="0.005 0.05 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="-0.045 0. 0.04" size="0.005 0.05 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="0 0.045 0.04" size="0.05 0.005 0.04" rgba="0 0.5 0 0.3" type="box" />
+            <geom pos="0 -0.045 0.04" size="0.05 0.005 0.04" rgba="0 0.5 0 0.3" type="box" />
+        </body>
+
+        <body name="box" pos="0.0 0.5 0.02" >
+			<joint axis="0 1 0"  name="red_box_joint" pos="0 0 0" range="-100 100" type="free"/>
+            <inertial pos="0 0 0" mass="0.03" diaginertia="0.002 0.002 0.002" />
+			<geom name="red_box" friction="2 0.1 0.1" pos="0 0 0" quat="0.707 0.707 0.707 0.707" size="0.012 0.012 0.012" rgba="1 0 0 1" type="box"/>
+			<body name="pole1" pos="0 0 0.012">
+				<joint name="ball1" pos="0 0 0" type="ball" limited="false"/>
+                <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+				<geom fromto="0 0 0 0.01 0.001 0.02" name="cpole1" rgba="0 0.7 0.7 1" size="0.002 0.1" type="capsule"/>
+				<body name="pole2" pos="0.01 0 0.02">
+					<joint name="ball2" type="ball" pos="0 0 0" />
+                    <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+					<geom name="cpole2" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.1" rgba="0.7 0 0.7 1"/>
+					<body name="pole3" pos="0.01 0 0.02">
+						<joint name="ball3" type="ball" pos="0 0 0" />
+                        <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+						<geom name="cpole3" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+						<body name="pole4" pos="0.01 0 0.02">
+							<joint name="ball4" type="ball" pos="0 0 0" />
+                            <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+							<geom name="cpole4" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0.7 1"/>
+							<body name="pole5" pos="0.01 0 0.02">
+								<joint name="ball5" type="ball" pos="0 0 0" />
+                                <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+								<geom name="cpole5" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+								<body name="pole6" pos="0.01 0 0.02">
+                                    <joint name="ball6" type="ball" pos="0 0 0" />
+                                    <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+                                    <geom name="cpole6" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0.7 1"/>
+                                    <body name="pole7" pos="0.01 0 0.02">
+                                        <joint name="ball7" type="ball" pos="0 0 0" />
+                                        <inertial pos="0 0 0" mass="0.001" diaginertia="0.00002 0.00002 0.00002" />
+                                        <geom name="cpole7" type="capsule" fromto="0 0 0 0.01 0 0.02" size="0.002 0.01" rgba="0.7 0 0 1"/>
+                                        <body name="end_box" pos="0.01 0 0.02">
+                                            <joint name="tea_bag_joint" type="ball" pos="0 0 0" />
+                                            <inertial pos="0 0 0" mass="0.1" diaginertia="0.0005 0.0005 0.001" />
+                                            <geom name="tea_bag" type="box" size="0.02 0.02 0.02" rgba="0.7 0.7 0 1" />
+                                        </body>
+                                    </body>
+                                </body>
+							</body>
+						</body>
+					</body>
+				</body>
+			</body>
+		</body>
+
+    </worldbody>
+
+    <actuator>
+        <position ctrllimited="true" ctrlrange="0.021 0.057" joint="vx300s_left/left_finger" kp="200"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-0.057 -0.021" joint="vx300s_left/right_finger" kp="200"  user="1"/>
+
+        <position ctrllimited="true" ctrlrange="0.021 0.057" joint="vx300s_right/left_finger" kp="200"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-0.057 -0.021" joint="vx300s_right/right_finger" kp="200"  user="1"/>
+
+    </actuator>
+
+    <keyframe>
+        <key qpos='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.1 0.5 0.02 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0'/>
+    </keyframe>
+
+
+</mujoco>

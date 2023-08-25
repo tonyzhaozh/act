@@ -11,6 +11,9 @@ _wandb
 
 fuse.cfg
 
+tmp/
+logs/
+
 *.ai
 
 # Generation results

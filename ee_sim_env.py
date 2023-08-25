@@ -47,6 +47,12 @@ def make_ee_sim_env(task_name):
         task = InsertionEETask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
+    elif 'sim_transfer_tea_bag' in task_name:
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_tea_bag.xml')
+        physics = mujoco.Physics.from_xml_path(xml_path)
+        task = TransferTeaBagEETask(random=False)
+        env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
+                                  n_sub_steps=None, flat_observation=False)
     else:
         raise NotImplementedError
     return env
@@ -265,3 +271,61 @@ class InsertionEETask(BimanualViperXEETask):
         if pin_touched: # successful insertion
             reward = 4
         return reward
+
+
+
+class TransferTeaBagEETask(BimanualViperXEETask):
+    def __init__(self, random=None):
+        super().__init__(random=random)
+        self.max_reward = 3
+        self.history_reward = 0
+
+    def initialize_episode(self, physics):
+        """Sets the state of the environment at the start of each episode."""
+        self.initialize_robots(physics)
+        # randomize box position
+        cube_pose = np.array([0.15, 0.5, 0.05, 1, 0, 0, 0])
+        box_start_idx = physics.model.name2id('red_box_joint', 'joint')
+        np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
+        # print(f"randomized cube position to {cube_position}")
+
+        self.history_reward = 0
+
+        super().initialize_episode(physics)
+
+    @staticmethod
+    def get_env_state(physics):
+        env_state = physics.data.qpos.copy()[16:]
+        return env_state
+
+    def get_reward(self, physics):
+        # return whether left gripper is holding the box
+        all_contact_pairs = []
+        for i_contact in range(physics.data.ncon):
+            id_geom_1 = physics.data.contact[i_contact].geom1
+            id_geom_2 = physics.data.contact[i_contact].geom2
+            name_geom_1 = physics.model.id2name(id_geom_1, 'geom')
+            name_geom_2 = physics.model.id2name(id_geom_2, 'geom')
+            contact_pair = (name_geom_1, name_geom_2)
+            all_contact_pairs.append(contact_pair)
+
+        touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
+        touch_table = ("tea_bag", "table") in all_contact_pairs or ("red_box", "table") in all_contact_pairs
+        touch_cup_base = ("cup_base", "tea_bag") in all_contact_pairs
+
+
+        reward = 0
+        if touch_right_gripper:
+            reward = 0
+        if touch_right_gripper and not touch_table: # lifted
+            reward = 0
+        if touch_cup_base:
+            reward = 100
+
+        if reward > self.history_reward:
+            self.history_reward = reward
+        else:
+            reward = 0
+
+        return reward
+

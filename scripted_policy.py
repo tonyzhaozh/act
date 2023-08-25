@@ -5,6 +5,8 @@ from pyquaternion import Quaternion
 from constants import SIM_TASK_CONFIGS
 from ee_sim_env import make_ee_sim_env
 
+import cv2
+
 import IPython
 e = IPython.embed
 
@@ -16,12 +18,15 @@ class BasePolicy:
         self.left_trajectory = None
         self.right_trajectory = None
 
+    def reset(self):
+        self.step_count = 0
+
     def generate_trajectory(self, ts_first):
         raise NotImplementedError
 
     @staticmethod
     def interpolate(curr_waypoint, next_waypoint, t):
-        t_frac = (t - curr_waypoint["t"]) / (next_waypoint["t"] - curr_waypoint["t"])
+        t_frac = (t - curr_waypoint["t"]) / (next_waypoint["t"] - curr_waypoint["t"] + 1e-8)
         curr_xyz = curr_waypoint['xyz']
         curr_quat = curr_waypoint['quat']
         curr_grip = curr_waypoint['gripper']
@@ -33,17 +38,17 @@ class BasePolicy:
         gripper = curr_grip + (next_grip - curr_grip) * t_frac
         return xyz, quat, gripper
 
-    def __call__(self, ts):
+    def __call__(self, ts, step_inc=1):
         # generate trajectory at first timestep, then open-loop execution
         if self.step_count == 0:
             self.generate_trajectory(ts)
 
         # obtain left and right waypoints
-        if self.left_trajectory[0]['t'] == self.step_count:
+        while self.left_trajectory[0]['t'] <= self.step_count:
             self.curr_left_waypoint = self.left_trajectory.pop(0)
         next_left_waypoint = self.left_trajectory[0]
 
-        if self.right_trajectory[0]['t'] == self.step_count:
+        while self.right_trajectory[0]['t'] <= self.step_count:
             self.curr_right_waypoint = self.right_trajectory.pop(0)
         next_right_waypoint = self.right_trajectory[0]
 
@@ -60,7 +65,7 @@ class BasePolicy:
         action_left = np.concatenate([left_xyz, left_quat, [left_gripper]])
         action_right = np.concatenate([right_xyz, right_quat, [right_gripper]])
 
-        self.step_count += 1
+        self.step_count += step_inc
         return np.concatenate([action_left, action_right])
 
 
@@ -94,7 +99,7 @@ class PickAndTransferPolicy(BasePolicy):
         self.right_trajectory = [
             {"t": 0, "xyz": init_mocap_pose_right[:3], "quat": init_mocap_pose_right[3:], "gripper": 0}, # sleep
             {"t": 90, "xyz": box_xyz + np.array([0, 0, 0.08]), "quat": gripper_pick_quat.elements, "gripper": 1}, # approach the cube
-            {"t": 130, "xyz": box_xyz + np.array([0, 0, -0.015]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
+            {"t": 130, "xyz": box_xyz + np.array([0., 0, -0.015]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
             {"t": 170, "xyz": box_xyz + np.array([0, 0, -0.015]), "quat": gripper_pick_quat.elements, "gripper": 0}, # close gripper
             {"t": 200, "xyz": meet_xyz + np.array([0.05, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 0}, # approach meet position
             {"t": 220, "xyz": meet_xyz, "quat": gripper_pick_quat.elements, "gripper": 0}, # move to meet position
@@ -103,6 +108,59 @@ class PickAndTransferPolicy(BasePolicy):
             {"t": 400, "xyz": meet_xyz + np.array([0.1, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 1}, # stay
         ]
 
+class PickAndTransferTeaBagPolicy(BasePolicy):
+
+    def generate_trajectory(self, ts_first):
+        init_mocap_pose_right = ts_first.observation['mocap_pose_right']
+        init_mocap_pose_left = ts_first.observation['mocap_pose_left']
+
+        box_info = np.array(ts_first.observation['env_state'])
+
+        box_xyz = box_info[:3]
+        box_quat = box_info[3:]
+        #print(f"Generate trajectory for {box_xyz=}")
+
+        gripper_pick_quat_org = Quaternion(init_mocap_pose_right[3:])
+        gripper_pick_quat = gripper_pick_quat_org * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-90)
+        gripper_move_quat = gripper_pick_quat_org * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-20)
+
+        meet_left_quat = Quaternion(axis=[1.0, 0.0, 0.0], degrees=90)
+
+        meet_xyz = np.array([-0.1, 0.6, 0.30])
+
+
+        self.left_trajectory = [
+            {"t": 0, "xyz": init_mocap_pose_left[:3], "quat": init_mocap_pose_left[3:], "gripper": 0}, # sleep
+            {"t": 500, "xyz": init_mocap_pose_left[:3], "quat": np.array([1, 0, 0, 0]), "gripper": 0}, # stay
+        ]
+
+        '''
+        # Old policy, oscillation is a problem
+        self.right_trajectory = [
+            {"t": 0, "xyz": init_mocap_pose_right[:3], "quat": init_mocap_pose_right[3:], "gripper": 0}, # sleep
+            {"t": 50, "xyz": box_xyz + np.array([0, 0, 0.08]), "quat": gripper_pick_quat.elements, "gripper": 1}, # approach the cube
+            {"t": 70, "xyz": box_xyz + np.array([0.005, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
+            {"t": 100, "xyz": box_xyz + np.array([0.005, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 0}, # close gripper
+            {"t": 170, "xyz": meet_xyz + np.array([0.05, 0, 0]), "quat": gripper_move_quat.elements, "gripper": 0}, # approach meet position
+            {"t": 200, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0}, # move to meet position
+            {"t": 420, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0},  # open gripper
+            {"t": 460, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 1}, # open gripper
+            {"t": 500, "xyz": meet_xyz + np.array([0.1, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 1},
+        ]
+        '''
+
+        self.right_trajectory = [
+            {"t": 0, "xyz": init_mocap_pose_right[:3], "quat": init_mocap_pose_right[3:], "gripper": 0}, # sleep
+            {"t": 50, "xyz": box_xyz + np.array([0, 0, 0.08]), "quat": gripper_pick_quat.elements, "gripper": 1}, # approach the cube
+            {"t": 70, "xyz": box_xyz + np.array([0.005, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
+            {"t": 100, "xyz": box_xyz + np.array([0.005, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 0}, # close gripper
+            {"t": 150, "xyz": box_xyz + np.array([0.1, 0, 0.1]), "quat": gripper_pick_quat.elements, "gripper": 0}, # vertical align
+            {"t": 250, "xyz": box_xyz + np.array([0.1, 0, 0.3]), "quat": gripper_move_quat.elements, "gripper": 0}, # rise up
+            {"t": 400, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0}, # move to meet position
+            {"t": 420, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0},  # open gripper
+            {"t": 450, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 1}, # open gripper
+            {"t": 500, "xyz": init_mocap_pose_right[:3], "quat": gripper_move_quat.elements, "gripper": 1},
+        ]
 
 class InsertionPolicy(BasePolicy):
 
@@ -149,7 +207,7 @@ class InsertionPolicy(BasePolicy):
         ]
 
 
-def test_policy(task_name):
+def test_policy(task_name, save_video=False, speed=1.0):
     # example rolling out pick_and_transfer policy
     onscreen_render = True
     inject_noise = False
@@ -160,10 +218,12 @@ def test_policy(task_name):
         env = make_ee_sim_env('sim_transfer_cube')
     elif 'sim_insertion' in task_name:
         env = make_ee_sim_env('sim_insertion')
+    elif 'sim_transfer_tea_bag' in task_name:
+        env = make_ee_sim_env('sim_transfer_tea_bag')
     else:
         raise NotImplementedError
 
-    for episode_idx in range(2):
+    for episode_idx in range(1):
         ts = env.reset()
         episode = [ts]
         if onscreen_render:
@@ -171,24 +231,53 @@ def test_policy(task_name):
             plt_img = ax.imshow(ts.observation['images']['angle'])
             plt.ion()
 
-        policy = PickAndTransferPolicy(inject_noise)
+        image_list = []
+
+        policy = PickAndTransferTeaBagPolicy(inject_noise)
+        episode_len = int(episode_len/(speed+1e-8))
+        cur_timestep = 0
         for step in range(episode_len):
-            action = policy(ts)
+            action = policy(ts, step_inc=speed)
             ts = env.step(action)
             episode.append(ts)
+            cur_timestep += speed
+            print(cur_timestep, ts.reward)
             if onscreen_render:
                 plt_img.set_data(ts.observation['images']['angle'])
+                image_list.append(ts.observation['images']['angle'])
                 plt.pause(0.02)
+
         plt.close()
 
-        episode_return = np.sum([ts.reward for ts in episode[1:]])
+        if save_video:
+            output_file = 'output_video.mp4'
+            codec = cv2.VideoWriter_fourcc(*'mp4v')
+            fps = 50
+
+            # Assuming images is your list of numpy arrays representing images
+            height, width, channels = image_list[0].shape
+
+            video_writer = cv2.VideoWriter(output_file, codec, fps, (width, height))
+
+            for image in image_list:
+                bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR
+                video_writer.write(bgr_image)
+
+            video_writer.release()
+
+            print('saved video')
+
+        rewards = [ts.reward for ts in episode[1:]]
+        episode_return = np.sum(rewards)
+        max_return = np.max(rewards)
         if episode_return > 0:
-            print(f"{episode_idx=} Successful, {episode_return=}")
+            print(f"{episode_idx=} Successful, {episode_return=}, {max_return=}")
         else:
             print(f"{episode_idx=} Failed")
 
 
+
 if __name__ == '__main__':
-    test_task_name = 'sim_transfer_cube_scripted'
-    test_policy(test_task_name)
+    test_task_name = 'sim_transfer_tea_bag_scripted'
+    test_policy(test_task_name, save_video=False, speed=5.0)
 
