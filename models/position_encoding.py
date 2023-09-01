@@ -6,10 +6,11 @@ import math
 import torch
 from torch import nn
 
-from util.misc import NestedTensor
+from models.util.nested_tensor import NestedTensor
 
 import IPython
 e = IPython.embed
+
 
 class PositionEmbeddingSine(nn.Module):
     """
@@ -78,16 +79,3 @@ class PositionEmbeddingLearned(nn.Module):
             y_emb.unsqueeze(1).repeat(1, w, 1),
         ], dim=-1).permute(2, 0, 1).unsqueeze(0).repeat(x.shape[0], 1, 1, 1)
         return pos
-
-
-def build_position_encoding(args):
-    N_steps = args.hidden_dim // 2
-    if args.position_embedding in ('v2', 'sine'):
-        # TODO find a better way of exposing other arguments
-        position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
-    elif args.position_embedding in ('v3', 'learned'):
-        position_embedding = PositionEmbeddingLearned(N_steps)
-    else:
-        raise ValueError(f"not supported {args.position_embedding}")
-
-    return position_embedding

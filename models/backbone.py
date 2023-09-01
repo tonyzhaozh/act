@@ -2,21 +2,18 @@
 """
 Backbone modules.
 """
-from collections import OrderedDict
-
 import torch
-import torch.nn.functional as F
 import torchvision
+import torch.distributed as dist
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
-from typing import Dict, List
+from typing import List
 
-from util.misc import NestedTensor, is_main_process
-
-from .position_encoding import build_position_encoding
+from models.util.nested_tensor import NestedTensor
 
 import IPython
 e = IPython.embed
+
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -74,13 +71,6 @@ class BackboneBase(nn.Module):
     def forward(self, tensor):
         xs = self.body(tensor)
         return xs
-        # out: Dict[str, NestedTensor] = {}
-        # for name, x in xs.items():
-        #     m = tensor_list.mask
-        #     assert m is not None
-        #     mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-        #     out[name] = NestedTensor(x, mask)
-        # return out
 
 
 class Backbone(BackboneBase):
@@ -89,9 +79,10 @@ class Backbone(BackboneBase):
                  train_backbone: bool,
                  return_interm_layers: bool,
                  dilation: bool):
+        is_main_process = not dist.is_available() or not dist.is_initialized()
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation=[False, False, dilation],
-            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
+            pretrained=is_main_process, norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
@@ -110,13 +101,3 @@ class Joiner(nn.Sequential):
             pos.append(self[1](x).to(x.dtype))
 
         return out, pos
-
-
-def build_backbone(args):
-    position_embedding = build_position_encoding(args)
-    train_backbone = args.lr_backbone > 0
-    return_interm_layers = args.masks
-    backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
-    model = Joiner(backbone, position_embedding)
-    model.num_channels = backbone.num_channels
-    return model

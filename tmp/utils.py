@@ -20,11 +20,16 @@ class EpisodicDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.episode_ids)
 
+    # I think we can improve this. They are taking qpos at a fixed time start_ts, but later we will call the policy multiple times during an episode.
+    # Each time we will send a new QPOS, so training only at start_ts doesn't cover all the states... we depend on random sampling to get a good distribution of states.
     def __getitem__(self, index):
         sample_full_episode = False # hardcode
 
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
+
+        # Num queries and sample by num queries -> Array.
+        # 20 Num queries - 400 len episodes -> 20 policies | Drop out %50 -> 10 policies.
         with h5py.File(dataset_path, 'r') as root:
             is_sim = root.attrs['sim']
             original_action_shape = root['/action'].shape
@@ -34,21 +39,23 @@ class EpisodicDataset(torch.utils.data.Dataset):
             else:
                 start_ts = np.random.choice(episode_len)
             # get observation at start_ts only
-            qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
+            qpos = root['/observations/qpos'][start_ts, 7:]
+            # qpos = root['/observations/qpos'][start_ts] -> PREVIOUS CODE!
             image_dict = dict()
             for cam_name in self.camera_names:
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
             # get all actions after and including start_ts
             if is_sim:
-                action = root['/action'][start_ts:]
+                action = root['/action'][start_ts:, 7:]  # Slice to get the last 7 dimensions
+                # action = root['/action'][start_ts:] -> PREVIOUS CODE! Previous 14 dim action (2 manipulators)
                 action_len = episode_len - start_ts
             else:
                 action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
                 action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
 
         self.is_sim = is_sim
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)
+        padded_action = np.zeros((original_action_shape[0], 7), dtype=np.float32)  # Change the second dimension to 7
+        # padded_action = np.zeros(original_action_shape, dtype=np.float32) -> PREVIOUS CODE! Original 14 dim action
         padded_action[:action_len] = action
         is_pad = np.zeros(episode_len)
         is_pad[action_len:] = 1
@@ -82,9 +89,9 @@ def get_norm_stats(dataset_dir, num_episodes):
     for episode_idx in range(num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
-            qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]
-            action = root['/action'][()]
+            qpos = root['/observations/qpos'][:, 7:]
+            qvel = root['/observations/qvel'][:, 7:]
+            action = root['/action'][:, 7:]
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
     all_qpos_data = torch.stack(all_qpos_data)
