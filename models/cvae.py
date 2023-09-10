@@ -19,9 +19,8 @@ class CVAE(nn.Module):
             backbones: torch module of the backbone to be used. See backbone.py
             transformer: torch module of the transformer architecture. See transformer.py
             state_dim: robot state dimension of the environment
-            num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
-            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+            num_queries: number of action-chunks.
+            camera_names: names of the cameras. Used to iterate over the cameras using the id.
         """
         super().__init__()
         self.num_queries = num_queries
@@ -46,12 +45,13 @@ class CVAE(nn.Module):
 
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
-        self.additional_pos_embed = nn.Embedding(2, hidden_dim) # learned position embedding for proprio and latent
+        self.additional_pos_embed = nn.Embedding(3, hidden_dim) # learned position embedding for target_pose, proprio and latent
 
-    def forward(self, qpos, image, actions=None, is_pad=None):
+    def forward(self, qpos, image, target_pose, actions=None, is_pad=None):
         """
         qpos: batch, qpos_dim
         image: batch, num_cam, channel, height, width
+        target_pose: batch, target_pose_dim
         actions: batch, seq, action_dim
         """
         is_training = actions is not None # train or val
@@ -99,7 +99,7 @@ class CVAE(nn.Module):
         # fold camera dimension into width dimension
         src = torch.cat(all_cam_features, axis=3)
         pos = torch.cat(all_cam_pos, axis=3)
-        hs = self.transformer(src, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
+        hs = self.transformer(src, target_pose, None, self.query_embed.weight, pos, latent_input, proprio_input, self.additional_pos_embed.weight)[0]
         a_hat = self.action_head(hs)
         is_pad_hat = self.is_pad_head(hs)
         return a_hat, is_pad_hat, [mu, logvar]

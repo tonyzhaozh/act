@@ -17,6 +17,7 @@ from torch import nn, Tensor
 import IPython
 e = IPython.embed
 
+
 class Transformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
@@ -46,35 +47,35 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None):
-        # TODO flatten only when input has H and W
+    def forward(self, src, target_pose, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None):
         if len(src.shape) == 4: # has H and W
             # flatten NxCxHxW to HWxNxC
             bs, c, h, w = src.shape
             src = src.flatten(2).permute(2, 0, 1)
             pos_embed = pos_embed.flatten(2).permute(2, 0, 1).repeat(1, bs, 1)
-            query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
             # mask = mask.flatten(1)
-
-            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim
-            pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
-
-            addition_input = torch.stack([latent_input, proprio_input], axis=0)
-            src = torch.cat([addition_input, src], axis=0)
         else:
             assert len(src.shape) == 3
             # flatten NxHWxC to HWxNxC
             bs, hw, c = src.shape
             src = src.permute(1, 0, 2)
-            pos_embed = pos_embed.unsqueeze(1).repeat(1, bs, 1)
-            query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+            pos_embed = pos_embed.permute(1, 0, 2)
 
-        tgt = torch.zeros_like(query_embed)
+        additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim
+        pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
+
+        addition_input = torch.stack([target_pose, latent_input, proprio_input], axis=0)
+        src = torch.cat([addition_input, src], axis=0)
+
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+
+        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+        tgt = torch.zeros_like(query_embed)
         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, query_pos=query_embed)
         hs = hs.transpose(1, 2)
         return hs
+
 
 class TransformerEncoder(nn.Module):
 
@@ -289,6 +290,7 @@ class TransformerDecoderLayer(nn.Module):
 # TODO: Clean global functions.
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+
 
 def _get_activation_fn(activation):
     """Return an activation function given a string"""
