@@ -9,7 +9,7 @@ from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 from typing import List
 
-from models.util.nested_tensor import NestedTensor
+from act.models.util.nested_tensor import NestedTensor
 
 import IPython
 e = IPython.embed
@@ -83,8 +83,21 @@ class Backbone(BackboneBase):
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation=[False, False, dilation],
             pretrained=is_main_process, norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
+        backbone = self.add_key_point_channel(backbone)
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
+
+    def add_key_point_channel(self, backbone):
+        old_weights = backbone.conv1.weight.clone()
+        backbone.conv1 = nn.Conv2d(4, backbone.conv1.out_channels, kernel_size=backbone.conv1.kernel_size,
+                                   stride=backbone.conv1.stride, padding=backbone.conv1.padding, bias=False)
+
+        new_weights = torch.zeros_like(backbone.conv1.weight)
+        new_weights[:, :3, :, :] = old_weights
+        new_weights[:, 3:4, :, :] = torch.mean(old_weights, dim=1, keepdim=True)
+
+        backbone.conv1.weight.data = new_weights
+        return backbone
 
 
 class Joiner(nn.Sequential):

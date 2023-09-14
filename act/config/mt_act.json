@@ -22,8 +22,8 @@
     "task_name": "",
     "seed": 0,
     "num_epochs": 0,
-    "kl_weight": null,
-    "chunk_size": null,
+    "kl_weight": 10,
+    "chunk_size": 20,
     "temporal_agg": false,
     "state_dim": 7
 }

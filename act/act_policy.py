@@ -1,8 +1,9 @@
+import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.transforms as transforms
 
-from act_builder import ACTBuilder
+from act.act_builder import ACTBuilder
 
 
 class ACTPolicy(nn.Module):
@@ -13,9 +14,7 @@ class ACTPolicy(nn.Module):
         print(f'KL Weight {self.kl_weight}')
 
     def __call__(self, qpos, image, actions=None, is_pad=None):
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-        image = normalize(image)
+        image = self.custom_normalize(image)
         if actions is not None: # training time
             actions = actions[:, :self.model.num_queries]
             is_pad = is_pad[:, :self.model.num_queries]
@@ -32,6 +31,21 @@ class ACTPolicy(nn.Module):
         else: # inference time
             a_hat, _, (_, _) = self.model(qpos, image) # no action, sample from prior
             return a_hat
+
+    def custom_normalize(self, image):
+        # Separate the RGB and the keypoint channels
+        rgb = image[:, :, :3]
+        keypoints = image[:, :, 3:4]
+
+        # Normalize only the RGB channels
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+
+        # Applying normalization across the num_cam dimension
+        normalized_rgb = torch.stack([normalize(cam) for cam in rgb.split(1, dim=1)], dim=1).squeeze(2)
+
+        # Combine normalized RGB with untouched keypoints channel
+        return torch.cat([normalized_rgb, keypoints], dim=2)
 
     def configure_optimizers(self):
         return self.optimizer

@@ -3,15 +3,15 @@ import json
 import torch
 import os
 
-from models.cvae import CVAE
-from models.transformer import Transformer, TransformerEncoder, TransformerEncoderLayer
-from models.backbone import Backbone, Joiner
-from models.position_encoding import PositionEmbeddingSine, PositionEmbeddingLearned
+from act.models.cvae import CVAE
+from act.models.transformer import Transformer, TransformerEncoder, TransformerEncoderLayer
+from act.models.backbone import Backbone, Joiner
+from act.models.position_encoding import PositionEmbeddingSine, PositionEmbeddingLearned
 
 
 class ACTBuilder:
     @classmethod
-    def get_args_parser(cls):
+    def get_args_parser(cls, args_list):
         # Load the config file
         curr_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(curr_dir, "config", "initial.json")
@@ -28,12 +28,13 @@ class ACTBuilder:
                 parser.add_argument(f'--{key}', required=True)
             else:
                 parser.add_argument(f'--{key}', default=value, type=type(value))
-        return parser
+        # Modify this line:
+        return parser, args_list
 
     @classmethod
     def build(cls, args_override):
-        parser = cls.get_args_parser()
-        args = parser.parse_args()
+        parser, args_list = cls.get_args_parser([])
+        args = parser.parse_args(args_list)
 
         for k, v in args_override.items():
             setattr(args, k, v)

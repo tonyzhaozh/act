@@ -8,16 +8,16 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
-from act_policy import ACTPolicy
+from act.act_policy import ACTPolicy
 
 # TODO: Remove after testing.
-from tmp.constants import DT
-from tmp.constants import PUPPET_GRIPPER_JOINT_OPEN
-from tmp.utils import load_data  # data functions
-from tmp.utils import sample_box_pose, sample_insertion_pose  # robot functions
-from tmp.utils import compute_dict_mean, set_seed, detach_dict  # helper functions
-from tmp.sim_env import BOX_POSE, make_sim_env
-from tmp.visualize_episodes import save_videos
+from act.tmp.constants import DT
+from act.tmp.constants import PUPPET_GRIPPER_JOINT_OPEN
+from act.tmp.utils import load_data  # data functions
+from act.tmp.utils import sample_box_pose, sample_insertion_pose  # robot functions
+from act.tmp.utils import compute_dict_mean, set_seed, detach_dict  # helper functions
+from act.tmp.sim_env import BOX_POSE, make_sim_env
+from act.tmp.visualize_episodes import save_videos
 
 import IPython
 
