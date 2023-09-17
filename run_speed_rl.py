@@ -3,17 +3,28 @@ from policy_speed_env import create_speed_env
 from rl.rainbowDQN.dqnAgent import DQNAgent
 from utils import set_seed
 
+from ee_sim_env import DISABLE_RENDER
+
+
+import IPython
+e = IPython.embed
+
 def main():
+    global DISABLE_RENDER
+    
     seed = 3407
     set_seed(seed)
     env = create_speed_env(use_parallel=True)
 
-    model_path = "dynamic_act_speed_rainbow/rainbow_state"
+    model_path = "dynamic_act_speed_rainbow/rainbow_state_tony"
 
     # parameters
     train_model = True
-    load_model = True
+    load_model = False
     test_model = True
+
+    disable_render = True
+    DISABLE_RENDER[0] = disable_render
 
     num_frames = 1000000
     memory_size = 50000

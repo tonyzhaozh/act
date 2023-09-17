@@ -1,4 +1,5 @@
 import random
+from time import time
 
 import torch
 import torch.nn as nn
@@ -12,10 +13,14 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 from datetime import datetime
+from uniplot import plot
 
 from .replayBuffer import PrioritizedReplayBuffer, ReplayBuffer
 from .network import Network
 
+
+import IPython
+e = IPython.embed
 
 class DQNAgent:
     """DQN Agent interacting with environment.
@@ -141,7 +146,7 @@ class DQNAgent:
             
         # Categorical DQN parameters
         self.v_min = v_min
-        self.v_max = v_max
+        self.v_max = v_max # TODO(tony) big enough?
         self.atom_size = atom_size
         self.support = torch.linspace(
             self.v_min, self.v_max, self.atom_size
@@ -198,8 +203,11 @@ class DQNAgent:
         #next_state, reward, terminated, truncated, _ = self.env.step(action)
         #done = terminated or truncated
         
+        t0 = time()
         next_state, reward, done, _ = self.env.step(action)
+        env_step_time = time() - t0
 
+        t0 = time()
         if not self.is_test:
             self.transition += [reward, next_state, done]
             
@@ -213,8 +221,10 @@ class DQNAgent:
             # add a single step transition
             if one_step_transition:
                 self.memory.store(*one_step_transition)
+        add_to_buffer_time = time() - t0
+        info = {'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
     
-        return next_state, reward, done
+        return next_state, reward, done, info
 
     def update_model(self) -> torch.Tensor:
         """Update the model by gradient descent."""
@@ -277,18 +287,29 @@ class DQNAgent:
         update_cnt = 0
         losses = 0
         scores = []
+        episode_action = []
         score = 0
         done_cnt = 0
         prev_done = 0
         success = False
         success_cnt = 0
 
-        for frame_idx in tqdm(range(1, num_frames + 1)):
+        env_step_time = []
+        add_to_buffer_time = []
+        training_time = []
+        inference_time = []
+        for frame_idx in range(1, num_frames + 1):
+            t0 = time()
             action = self.select_action(state)
-            next_state, reward, done = self.step(action)
+            inference_time.append(time() - t0)
+
+            next_state, reward, done, info = self.step(action)  # TODO(tony) normalize state
+            env_step_time.append(info['env_step_time'])
+            add_to_buffer_time.append(info['add_to_buffer_time'])
 
             state = next_state
             score += reward
+            episode_action.append(action)
             
             # NoisyNet: removed decrease of epsilon
             
@@ -320,9 +341,9 @@ class DQNAgent:
 
             # if training is ready
             if len(self.memory) >= self.batch_size and done:
-                print("updating model")
-                update_num = min(100, len(self.memory) // self.batch_size // 2)
-                for _ in tqdm(range(update_num)):
+                t0 = time()
+                update_num = min(100, len(self.memory) // self.batch_size // 2)  # TODO(tony) check if this is enough/too much
+                for _ in range(update_num):
                     loss = self.update_model()
                     losses += loss
                     update_cnt += 1
@@ -331,14 +352,28 @@ class DQNAgent:
                     if update_cnt % self.target_update == 0:
                         #self._target_hard_update()
                         self._target_soft_update()
+                training_time.append(time() - t0)
+
                 avg_loss = losses / episode_length
-                print("Episode", done_cnt, " frame_idx:", frame_idx, "length:", episode_length, "loss:", avg_loss, "score:", score, " success:", success)
+                # print("Episode", done_cnt, " frame_idx:", frame_idx, "length:", episode_length, "loss:", avg_loss, "score:", score, " success:", success)
+                orig_len = self.env.episode_len
+                
+                # terminal visualizations
+                print(f"Episode {done_cnt} (total frame {frame_idx}) |\tSuccess: {success}\tReturn: {score:.2f}\tEpisode len: {episode_length}/{orig_len}({orig_len/episode_length:.2f}x) |\tLoss: {avg_loss:.2f}\tEps: {self.epsilon:.2f}")                
+                plot(episode_action, x_max=orig_len, x_min = 0, y_min = 0, y_max = self.env.speed_slot_num, title=f"Episode {done_cnt} speed")
+                print(f'env_step_time: {sum(env_step_time):.2f}s, add_to_buffer_time: {sum(add_to_buffer_time):.2f}s, training_time: {sum(training_time):.2f}s, inference_time: {sum(inference_time):.2f}s\n\n')
+
                 self.writer.add_scalar("Loss", avg_loss, done_cnt)
             
             if done:
                 losses = 0
                 score = 0
                 success = False
+                episode_action = []
+                env_step_time = []
+                add_to_buffer_time = []
+                training_time = []
+                inference_time = []
 
             # plotting
             if frame_idx % plotting_interval == 0:
@@ -375,7 +410,7 @@ class DQNAgent:
 
                 action = self.select_action(state)
                 print(action)
-                next_state, reward, done = self.step(action)
+                next_state, reward, done, info = self.step(action)
 
                 state = next_state
                 score += reward
@@ -468,11 +503,11 @@ class DQNAgent:
         plt.plot(losses)
         plt.show()
 
-    def save(self, filename, directory: str = "/scr2/tonyzhao/train_logs"):
+    def save(self, filename, directory: str = "/scr2/tonyzhao/train_logs"): # TODO(tony)
         """Save trained model."""
         torch.save(self.dqn.state_dict(), "%s/%s_dqn.pth" % (directory, filename))
 
-    def load(self, filename: str, directory: str = "/scr2/tonyzhao/train_logs"):
+    def load(self, filename: str, directory: str = "/scr2/tonyzhao/train_logs"): # TODO(tony)
         """Load trained model."""
         self.dqn.load_state_dict(torch.load("%s/%s_dqn.pth" % (directory, filename)))
         self._target_hard_update()

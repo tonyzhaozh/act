@@ -106,7 +106,7 @@ class SpeedPolicyEnv:
                 action = self.parallel_policy(self.parallel_cur_ts)
                 try:
                     self.parallel_cur_ts = self.parallel_env.step(action)
-                except Exception as e:
+                except Exception as ee:
                     print("Warning: bad physics")
 
                 parallel_speed -= 1
@@ -123,7 +123,7 @@ class SpeedPolicyEnv:
         action = self.policy(self.cur_ts, step_inc=speed)
         try:
             self.cur_ts = self.env.step(action)
-        except Exception as e:
+        except Exception as ee:
             print("Warning: bad physics")
             return self.timestep_cnt, 0.0, True, {}
 
@@ -164,9 +164,9 @@ class SpeedPolicyEnv:
 
         if done:
             #print("Step counts:", self.real_cnt, self.timestep_cnt)
-            plt.close()
-            plt.plot(self.speed_list)
-            plt.savefig("tmp/speed.png")
+            # plt.close()
+            # plt.plot(self.speed_list)
+            # plt.savefig("tmp/speed.png")
 
             if self.use_parallel_env:
                 #plt.close()
