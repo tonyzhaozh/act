@@ -4,6 +4,9 @@ import torch.nn.functional as F
 import torchvision.models as models
 import math
 
+import IPython
+e = IPython.embed
+
 class NoisyLinear(nn.Module):
     """Noisy linear module for NoisyNet.
     
@@ -104,6 +107,7 @@ class ImageBackbone(nn.Module):
         x = self.backbone(x)
         return x
 
+
 class Network(nn.Module):
     def __init__(
         self, 
@@ -111,7 +115,7 @@ class Network(nn.Module):
         out_dim: int,
         atom_size: int, 
         support: torch.Tensor,
-        hidden_dim: int = 128,
+        hidden_dim: int = 256,
         use_state = True
     ):
         """Initialization."""
@@ -123,38 +127,23 @@ class Network(nn.Module):
         self.use_state = use_state
 
         # set common feature layer
-        self.feature_layer = nn.Sequential(
-            #nn.Linear(in_dim, 128),
-            #nn.ReLU(),
-            ImageBackbone(out_dim=hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim)
-        )
-
-        self.qvel_feature_layer = nn.Sequential(
-            nn.Linear(14, hidden_dim),
-            nn.ReLU()
-        )
-
-        self.all_feature_layer = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
-            nn.ReLU()
-        )
-       
         if self.use_state:
-            self.state_layer = nn.Sequential(
-                nn.Linear(39 + 14, hidden_dim),
-                nn.ReLU()
+            self.feature_layer = nn.Sequential(
+                nn.Linear(in_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
             )
+        else:
+            raise NotImplementedError
 
         # set advantage layer
-        self.advantage_hidden_layer = NoisyLinear(hidden_dim * 2, hidden_dim)
+        self.advantage_hidden_layer = NoisyLinear(hidden_dim, hidden_dim)
         self.advantage_layer = NoisyLinear(hidden_dim, out_dim * atom_size)
 
         # set value layer
-        self.value_hidden_layer = NoisyLinear(hidden_dim * 2, hidden_dim)
+        self.value_hidden_layer = NoisyLinear(hidden_dim, hidden_dim)
         self.value_layer = NoisyLinear(hidden_dim, atom_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -166,26 +155,10 @@ class Network(nn.Module):
     
     def dist(self, x: torch.Tensor) -> torch.Tensor:
         """Get distribution for atoms."""
-
-        if not self.use_state:
-            obs = x[:, :-14]
-            qvel = x[:, -14:]
-            x = obs.reshape([-1, 96, 128, 3]).permute(0, 3, 1, 2)
-
-            obs_feature = self.feature_layer(x)
-            qvel_feature = self.qvel_feature_layer(qvel)
-
-            feature = torch.concatenate((obs_feature, qvel_feature), dim=1)
+        if self.use_state:
+            feature = self.feature_layer(x)
         else:
-            state = x[:, :-14]
-            qvel = x[:, -14:]
-
-            state_feature = self.state_layer(state)
-            qvel_feature = self.qvel_feature_layer(qvel)
-
-            feature = torch.concatenate((state_feature, qvel_feature), dim=1)
-        
-        feature = self.all_feature_layer(feature)
+            raise NotImplementedError
 
         adv_hid = F.relu(self.advantage_hidden_layer(feature))
         val_hid = F.relu(self.value_hidden_layer(feature))
