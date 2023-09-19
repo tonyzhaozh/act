@@ -1545,3 +1545,24 @@ python record_sim_episodes.py \
 scp -rp tonyzhao@scdt:/iris/u/lucyshi/kil/data/outputs/act_ckpt/aloha_coffee_new_waypoint_t5e-3_20k/policy_epoch_28[0-9][0-9][0-9]_seed_0.ckpt /scr2/tonyzhao/train_logs/aloha_coffee_new_waypoint_t5e-3_20k
 scp -rp tonyzhao@scdt:/iris/u/lucyshi/kil/data/outputs/act_ckpt/aloha_coffee_new_waypoint_t5e-3_20k/policy_epoch_28[0-9][0-9][0-9]_seed_0.ckpt /scr2/tonyzhao/train_logs/aloha_coffee_new_waypoint_t5e-3_20k
 scp -rp tonyzhao@scdt:/iris/u/lucyshi/kil/data/outputs/act_ckpt/aloha_coffee_new_waypoint_t5e-3_20k/policy_epoch_[2-9][0-9][0-9][0-9]0_seed_0.ckpt /scr2/tonyzhao/train_logs/aloha_coffee_new_waypoint_t5e-3_20k
+
+
+
+
+
+# SpeedTuning
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py
+
+
+
+
+
+
+
+
+
+
+

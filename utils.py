@@ -193,7 +193,11 @@ def detach_dict(d):
     return new_d
 
 def set_seed(seed):
+    torch.manual_seed(seed)
     np.random.seed(seed)
+    os.environ['PYTHONHASHSEED']=str(seed)
+    random.seed(seed)
+
 
 def interpolate_by_step(raw, step, max_length = None, with_batch = True):
     # raw: numpy array of shape (N, 14)
