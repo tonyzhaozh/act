@@ -16,9 +16,10 @@ e = IPython.embed
 
 class SpeedPolicyEnv:
 
-    def __init__(self, env, policy, episode_len, save_video=False, onscreen_render=True, use_state=True, parallel_env = None, parallel_policy = None):
+    def __init__(self, env, policy, reward_fn, episode_len, save_video=False, onscreen_render=True, use_state=True, parallel_env = None, parallel_policy = None):
         self.env = env
         self.policy = policy
+        self.reward_fn = reward_fn
         self.episode_len = episode_len
         self.save_video = save_video
         self.onscreen_render = onscreen_render
@@ -125,7 +126,7 @@ class SpeedPolicyEnv:
             self.cur_ts = self.env.step(action)
         except Exception as ee:
             print("Warning: bad physics")
-            return self.timestep_cnt, 0.0, True, {}
+            return self.timestep_cnt, 0.0, True, {'success': False}
 
         self.episode.append(self.cur_ts)
 
@@ -146,19 +147,15 @@ class SpeedPolicyEnv:
         #done = reward == 100.0 or self.timestep_cnt >= self.episode_len
 
         done = self.timestep_cnt >= self.episode_len
-        if done:
-            # reward += 1
-            pass
-        ret_reward = 100 if done and self.cur_success else 0
 
-        ret_reward += (speed ** 1.0) / 200
+        ret_reward = self.reward_fn(speed, done, self.cur_success)
 
-        if self.use_parallel_env:
-            if not self.use_state:
-                #ret_reward += (20 - image_parallel_difference_mse) / 20 / 10
-                pass
-            else:
-                ret_reward -= state_parallal_difference
+        # if self.use_parallel_env:
+        #     if not self.use_state:
+        #         #ret_reward += (20 - image_parallel_difference_mse) / 20 / 10
+        #         pass
+        #     else:
+        #         ret_reward -= state_parallal_difference
 
         #print("Step:", self.timestep_cnt, " Speed:", speed, " Reward:", reward)
 
@@ -198,7 +195,7 @@ class SpeedPolicyEnv:
                 print('saved video')
 
         #return observation, reward, done, {}  # for policies conditioned on images
-        return observation, ret_reward, done, {}  # for policies conditioned on images
+        return observation, ret_reward, done, {'success': self.cur_success}  # for policies conditioned on images
         #return number_to_one_hot(min(500, int(self.timestep_cnt))), reward, done, {}  # for policies conditioned on time
 
     def get_obs(self, parallel = False, use_state = True):
@@ -310,7 +307,7 @@ def test_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=None,
 
     return max_reward
 
-def create_speed_env(task_name = 'sim_transfer_tea_bag_scripted', onscreen_render=False, use_parallel = False, save_video=False):
+def create_speed_env(task_name = 'sim_transfer_tea_bag_scripted', reward_fn = None, onscreen_render=False, use_parallel = False, save_video=False):
     episode_len = SIM_TASK_CONFIGS[task_name]['episode_len']
     if 'sim_transfer_tea_bag' in task_name:
         env = make_ee_sim_env('sim_transfer_tea_bag')
@@ -319,9 +316,9 @@ def create_speed_env(task_name = 'sim_transfer_tea_bag_scripted', onscreen_rende
 
     policy = PickAndTransferTeaBagPolicy()
     if not use_parallel:
-        speed_env = SpeedPolicyEnv(env, policy, episode_len, onscreen_render=onscreen_render, save_video=save_video)
+        speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, onscreen_render=onscreen_render, save_video=save_video)
     else:
-        speed_env = SpeedPolicyEnv(env, policy, episode_len, onscreen_render=onscreen_render,
+        speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, onscreen_render=onscreen_render,
                                    parallel_env = copy.deepcopy(env), parallel_policy = copy.deepcopy(policy), save_video=save_video)
 
     return speed_env

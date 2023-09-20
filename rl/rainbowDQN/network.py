@@ -1,8 +1,9 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-import math
 
 import IPython
 e = IPython.embed
@@ -122,7 +123,9 @@ class Network(nn.Module):
         super(Network, self).__init__()
         
         self.support = support
+        self.in_dim = in_dim
         self.out_dim = out_dim
+        self.hidden_dim = hidden_dim
         self.atom_size = atom_size
         self.use_state = use_state
 
@@ -146,15 +149,24 @@ class Network(nn.Module):
         self.value_hidden_layer = NoisyLinear(hidden_dim, hidden_dim)
         self.value_layer = NoisyLinear(hidden_dim, atom_size)
 
+        # norm stats as non-learnable constants
+        self.states_mean = torch.nn.Parameter(torch.zeros(in_dim), requires_grad=False)
+        self.states_std = torch.nn.Parameter(torch.ones(in_dim), requires_grad=False)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward method implementation."""
         dist = self.dist(x)
         q = torch.sum(dist * self.support, dim=2)
-        
         return q
-    
+
+    def update_norm_stats(self, norm_stats: dict):
+        self.states_mean.copy_(torch.from_numpy(norm_stats['states_mean']))
+        self.states_std.copy_(torch.from_numpy(norm_stats['states_std']))
+
     def dist(self, x: torch.Tensor) -> torch.Tensor:
         """Get distribution for atoms."""
+        x = (x - self.states_mean) / self.states_std  # normalization
+
         if self.use_state:
             feature = self.feature_layer(x)
         else:

@@ -1,5 +1,6 @@
 import random
 from time import time
+from collections import deque
 
 import torch
 import torch.nn as nn
@@ -14,6 +15,7 @@ from tqdm import tqdm
 import os
 from datetime import datetime
 from uniplot import plot
+from colorama import Fore, Back, Style
 
 from .replayBuffer import PrioritizedReplayBuffer, ReplayBuffer
 from .network import Network
@@ -56,6 +58,7 @@ class DQNAgent:
         #lr = 1e-5,
         gamma: float = 0.97,
         tau: float = 0.5,
+        frame_skip: int = 10,
 
         # exploration
         epsilon: float = 1.0,
@@ -80,7 +83,7 @@ class DQNAgent:
         n_step_alpha: float = 1.0,
 
         # Logs
-        log_dir = "logs",
+        log_dir = None,
         file_path = None,
         name = "",
         ckpt_save_freq = None
@@ -105,8 +108,9 @@ class DQNAgent:
         """
         obs_dim = env.obs_space
         action_dim = env.action_space
-        
+
         self.env = env
+        self.frame_skip = frame_skip
         self.batch_size = batch_size
         self.target_update = target_update
         self.seed = seed
@@ -173,7 +177,7 @@ class DQNAgent:
 
         # logging
         self.name = name
-        self.writer = SummaryWriter(log_dir + os.sep + name + datetime.now().strftime("%Y%m%d-%H%M%S") )
+        self.writer = SummaryWriter(log_dir + os.sep + datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + name )
         self.ckpt_save_freq = ckpt_save_freq
 
     def select_action(self, state: np.ndarray) -> np.ndarray:
@@ -198,13 +202,20 @@ class DQNAgent:
         
         return selected_action
 
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, np.float64, bool]:
+    def step(self, action: np.ndarray, frame_skip: int) -> Tuple[np.ndarray, np.float64, bool, dict]:
         """Take an action and return the response of the env."""
         #next_state, reward, terminated, truncated, _ = self.env.step(action)
         #done = terminated or truncated
         
         t0 = time()
-        next_state, reward, done, _ = self.env.step(action)
+        reward = 0
+        for _ in range(frame_skip):
+            next_state, sub_reward, done, info = self.env.step(action)
+            reward += sub_reward
+            if done:
+                break
+        
+        success = info['success']
         env_step_time = time() - t0
 
         t0 = time()
@@ -222,7 +233,7 @@ class DQNAgent:
             if one_step_transition:
                 self.memory.store(*one_step_transition)
         add_to_buffer_time = time() - t0
-        info = {'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
+        info = {'success': success, 'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
     
         return next_state, reward, done, info
 
@@ -285,31 +296,32 @@ class DQNAgent:
         
         state = self.env.reset()
         update_cnt = 0
-        losses = 0
-        scores = []
+        episode_cnt = 0
+        episode_return = 0
+        prev_frame_idx = 0
         episode_action = []
-        score = 0
-        done_cnt = 0
-        prev_done = 0
-        success = False
-        success_cnt = 0
 
         env_step_time = []
         add_to_buffer_time = []
         training_time = []
         inference_time = []
+
+        states_history = deque(maxlen=num_frames)
         for frame_idx in range(1, num_frames + 1):
             t0 = time()
+
             action = self.select_action(state)
             inference_time.append(time() - t0)
 
-            next_state, reward, done, info = self.step(action)  # TODO(tony) normalize state
+            next_state, reward, done, info = self.step(action, self.frame_skip)
             env_step_time.append(info['env_step_time'])
             add_to_buffer_time.append(info['add_to_buffer_time'])
+            success = info['success']
 
             state = next_state
-            score += reward
+            episode_return += reward
             episode_action.append(action)
+            states_history.append(state)
             
             # NoisyNet: removed decrease of epsilon
             
@@ -321,31 +333,42 @@ class DQNAgent:
 
             # if episode ends
             if done:
-                done_cnt += 1
-                episode_length = frame_idx - prev_done
+                episode_cnt += 1
+                episode_length = frame_idx - prev_frame_idx
 
-                self.writer.add_scalar("Score", score, done_cnt)
-                self.writer.add_scalar("Length", episode_length, done_cnt)
-
-                #state, _ = self.env.reset(seed=self.seed)
-                state = self.env.reset()
-                scores.append(score)
-                prev_done = frame_idx
-
-                success = score >= 10.0
-                self.writer.add_scalar("Success", 1 if success else 0, done_cnt)
+                self.writer.add_scalar("Performance/Return", episode_return, episode_cnt)
+                self.writer.add_scalar("Metrics/Length", episode_length, episode_cnt)
+                self.writer.add_scalar("Performance/Success", 1 if success else 0, episode_cnt)
                 if success:
-                    self.writer.add_scalar("Success Length", episode_length, success_cnt)
-                    self.writer.add_scalar("Success Score", score, success_cnt)
-                    success_cnt += 1
+                    self.writer.add_scalar("Metrics/Success Length", episode_length, episode_cnt)
+                    self.writer.add_scalar("Metrics/Success Return", episode_return, episode_cnt)
+
+                prev_frame_idx = frame_idx
+                state = self.env.reset()
+                #state, _ = self.env.reset(seed=self.seed)
 
             # if training is ready
             if len(self.memory) >= self.batch_size and done:
+                # calculate up-to-date normalization stats every batch
                 t0 = time()
-                update_num = min(100, len(self.memory) // self.batch_size // 2)  # TODO(tony) check if this is enough/too much
+                all_states = np.array(states_history)
+                states_mean = np.mean(all_states, axis=0)
+                states_std = np.std(all_states, axis=0)
+                norm_stats = {"states_mean": states_mean, "states_std": states_std}
+                if time()-t0 > 0.1: print("Warning: slow norm stats computation")
+
+                # update stats
+                self.dqn.update_norm_stats(norm_stats)
+                self.dqn_target.update_norm_stats(norm_stats)
+
+                t0 = time()
+                # update_num = min(200, len(self.memory) // self.batch_size // 2) # TODO Tune
+                update_num = episode_length
+
+                total_loss = 0
                 for _ in range(update_num):
                     loss = self.update_model()
-                    losses += loss
+                    total_loss += loss
                     update_cnt += 1
                 
                     # if hard update is needed
@@ -354,31 +377,26 @@ class DQNAgent:
                         self._target_soft_update()
                 training_time.append(time() - t0)
 
-                avg_loss = losses / episode_length
-                # print("Episode", done_cnt, " frame_idx:", frame_idx, "length:", episode_length, "loss:", avg_loss, "score:", score, " success:", success)
-                orig_len = self.env.episode_len
-                
-                # terminal visualizations
-                print(f"Episode {done_cnt} (total frame {frame_idx}) |\tSuccess: {success}\tReturn: {score:.2f}\tEpisode len: {episode_length}/{orig_len}({orig_len/episode_length:.2f}x) |\tLoss: {avg_loss:.2f}\tEps: {self.epsilon:.2f}")                
-                plot(episode_action, x_max=orig_len, x_min = 0, y_min = 0, y_max = self.env.speed_slot_num, title=f"Episode {done_cnt} speed")
-                print(f'env_step_time: {sum(env_step_time):.2f}s, add_to_buffer_time: {sum(add_to_buffer_time):.2f}s, training_time: {sum(training_time):.2f}s, inference_time: {sum(inference_time):.2f}s\n\n')
+                avg_loss = total_loss / episode_length
+                orig_len = self.env.episode_len / self.frame_skip
+                self.writer.add_scalar("Metrics/Loss", avg_loss, episode_cnt)
 
-                self.writer.add_scalar("Loss", avg_loss, done_cnt)
-            
+                # terminal visualizations
+                if success:
+                    style = Fore.GREEN
+                else:
+                    style = Fore.RED
+                print(style + f"Episode {episode_cnt} (total frame {frame_idx}) | Success: {success} Return: {episode_return:.2f} Episode len: {episode_length}/{orig_len}({orig_len/episode_length:.2f}x) | Loss: {avg_loss:.2f} Eps: {self.epsilon:.2f}", Style.RESET_ALL)
+                plot(episode_action, x_max=orig_len, x_min = 0, y_min = 0, y_max = self.env.speed_slot_num, title=f"Episode {episode_cnt} speed")
+                print(f'env_step_time: {sum(env_step_time):.2f}s, add_to_buffer_time: {sum(add_to_buffer_time):.2f}s, training_time: {sum(training_time):.2f}s({update_num}steps), inference_time: {sum(inference_time):.2f}s\n\n')
+
             if done:
-                losses = 0
-                score = 0
-                success = False
+                episode_return = 0
                 episode_action = []
                 env_step_time = []
                 add_to_buffer_time = []
                 training_time = []
                 inference_time = []
-
-            # plotting
-            if frame_idx % plotting_interval == 0:
-                # self._plot(frame_idx, scores, losses)
-                pass
 
 
             if self.ckpt_save_freq and frame_idx % self.ckpt_save_freq == 0:
@@ -390,6 +408,7 @@ class DQNAgent:
                 
     def test(self, num_tests, test_max_length = 500, video_folder: str = None) -> None:
         """Test the agent."""
+        raise NotImplementedError
         self.is_test = True
         
         # for recording a video
@@ -410,7 +429,7 @@ class DQNAgent:
 
                 action = self.select_action(state)
                 print(action)
-                next_state, reward, done, info = self.step(action)
+                next_state, reward, done, info = self.step(action, self.frame_skip)
 
                 state = next_state
                 score += reward
@@ -434,7 +453,7 @@ class DQNAgent:
         action = torch.LongTensor(samples["acts"]).to(device)
         reward = torch.FloatTensor(samples["rews"].reshape(-1, 1)).to(device)
         done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
-        
+
         # Categorical DQN algorithm
         delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1)
 
@@ -485,29 +504,12 @@ class DQNAgent:
             target_param.data.copy_(
                 self.tau * local_param.data + (1.0 - self.tau) * target_param.data
             )
-                
-    def _plot(
-        self, 
-        frame_idx: int, 
-        scores: List[float], 
-        losses: List[float],
-    ):
-        """Plot the training progresses."""
-        #clear_output(True)
-        plt.figure(figsize=(20, 5))
-        plt.subplot(131)
-        plt.title('frame %s. score: %s' % (frame_idx, np.mean(scores[-10:])))
-        plt.plot(scores)
-        plt.subplot(132)
-        plt.title('loss')
-        plt.plot(losses)
-        plt.show()
 
-    def save(self, filename, directory: str = "/scr2/tonyzhao/train_logs"): # TODO(tony)
+    def save(self, filename: str):
         """Save trained model."""
-        torch.save(self.dqn.state_dict(), "%s/%s_dqn.pth" % (directory, filename))
+        torch.save(self.dqn.state_dict(), f"{filename}_dqn.pth")
 
-    def load(self, filename: str, directory: str = "/scr2/tonyzhao/train_logs"): # TODO(tony)
+    def load(self, filename: str):
         """Load trained model."""
-        self.dqn.load_state_dict(torch.load("%s/%s_dqn.pth" % (directory, filename)))
+        self.dqn.load_state_dict(torch.load(f"{filename}_dqn.pth"))
         self._target_hard_update()
