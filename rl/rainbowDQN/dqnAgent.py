@@ -398,10 +398,10 @@ class DQNAgent:
                 training_time = []
                 inference_time = []
 
-
-            if self.ckpt_save_freq and frame_idx % self.ckpt_save_freq == 0:
-                print("Saving Checkpoint")
-                self.save("dynamic_act_speed_rainbow/" + "ckpt_" + repr(frame_idx) + "_" + self.name)
+            # TODO(Tony) add back
+            # if self.ckpt_save_freq and frame_idx % self.ckpt_save_freq == 0:
+            #     print("Saving Checkpoint")
+            #     self.save("dynamic_act_speed_rainbow/" + "ckpt_" + repr(frame_idx) + "_" + self.name)
    
                 
         self.env.close()
