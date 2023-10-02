@@ -119,7 +119,7 @@ class SpeedPolicyEnv:
                 image_parallel_difference_mse = self.get_parallel_difference_mse()
                 self.difference_list_mse.append(image_parallel_difference_mse)
             else:
-                state_parallal_difference = self.get_parallel_difference_state()
+                state_parallel_difference = self.get_parallel_difference_state()
 
         action = self.policy(self.cur_ts, step_inc=speed)
         try:

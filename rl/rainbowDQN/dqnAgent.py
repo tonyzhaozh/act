@@ -334,7 +334,7 @@ class DQNAgent:
             # if episode ends
             if done:
                 episode_cnt += 1
-                episode_length = frame_idx - prev_frame_idx
+                episode_length = (frame_idx - prev_frame_idx) * self.frame_skip   # real episode length
 
                 self.writer.add_scalar("Performance/Return", episode_return, episode_cnt)
                 self.writer.add_scalar("Metrics/Length", episode_length, episode_cnt)
