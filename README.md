@@ -1,3 +1,5 @@
+# Slightly modified to work with isaac sim(this repo is useless to you use the original one)
+
 # ACT: Action Chunking with Transformers
 
 ### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
