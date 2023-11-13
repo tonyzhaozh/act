@@ -1,7 +1,7 @@
 import pathlib
 
 ### Task parameters
-DATA_DIR = '<put your data dir here>'
+DATA_DIR = '/home/mlrig/Documents/act/data'
 SIM_TASK_CONFIGS = {
     'sim_transfer_cube_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_scripted',
@@ -29,6 +29,12 @@ SIM_TASK_CONFIGS = {
         'num_episodes': 50,
         'episode_len': 500,
         'camera_names': ['top']
+    },
+    'sim_stack_block_scripted': {
+        'dataset_dir': DATA_DIR + '/stack_block',
+        'num_episodes': 5,
+        'episode_len': 100,
+        'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
     },
 }
 
@@ -74,3 +80,4 @@ PUPPET_POS2JOINT = lambda x: PUPPET_GRIPPER_POSITION_NORMALIZE_FN(x) * (PUPPET_G
 PUPPET_JOINT2POS = lambda x: PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN((x - PUPPET_GRIPPER_JOINT_CLOSE) / (PUPPET_GRIPPER_JOINT_OPEN - PUPPET_GRIPPER_JOINT_CLOSE))
 
 MASTER_GRIPPER_JOINT_MID = (MASTER_GRIPPER_JOINT_OPEN + MASTER_GRIPPER_JOINT_CLOSE)/2
+

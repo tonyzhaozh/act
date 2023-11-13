@@ -24,6 +24,7 @@ e = IPython.embed
 def main(args):
     set_seed(1)
     # command line parameters
+    print(args)
     is_eval = args['eval']
     ckpt_dir = args['ckpt_dir']
     policy_class = args['policy_class']
@@ -35,6 +36,7 @@ def main(args):
 
     # get task parameters
     is_sim = task_name[:4] == 'sim_'
+    is_sim = True  # TODO remove
     if is_sim:
         from constants import SIM_TASK_CONFIGS
         task_config = SIM_TASK_CONFIGS[task_name]
@@ -85,7 +87,8 @@ def main(args):
         'seed': args['seed'],
         'temporal_agg': args['temporal_agg'],
         'camera_names': camera_names,
-        'real_robot': not is_sim
+        'real_robot': not is_sim,
+        'isaac_sim': args['isaac_sim'],
     }
 
     if is_eval:
@@ -153,6 +156,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
+    is_isaac_sim = config['isaac_sim']
     policy_class = config['policy_class']
     onscreen_render = config['onscreen_render']
     policy_config = config['policy_config']
@@ -178,11 +182,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
 
     # load environment
-    if real_robot:
+    if real_robot and not is_isaac_sim:
         from aloha_scripts.robot_utils import move_grippers # requires aloha
         from aloha_scripts.real_env import make_real_env # requires aloha
         env = make_real_env(init_node=True)
         env_max_reward = 0
+    elif is_isaac_sim:
+        from isaac_sim_robot_utils import make_isaac_sim_env, move_grippers
+        env = make_isaac_sim_env()
+        env_max_reward = 0
+        pass
     else:
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
@@ -315,6 +324,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad = data
+    # image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.to('cuda', dtype=torch.float32), action_data.to('cuda', dtype=torch.float32), is_pad.cuda()
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
     return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
 
@@ -416,6 +426,7 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--eval', action='store_true')
+    parser.add_argument('--isaac_sim', action='store_true')
     parser.add_argument('--onscreen_render', action='store_true')
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
     parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
