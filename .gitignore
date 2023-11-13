@@ -141,4 +141,5 @@ dmypy.json
 ./data
 ./ckpt
 ./ckpt/
+/ckpt/**
 
