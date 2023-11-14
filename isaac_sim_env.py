@@ -150,20 +150,10 @@ class IsaacSimEnv:
             observation=self.get_observation())
 
     def step(self, action):
-        print('step called')
         state_len = int(len(action) / 2)
         left_action = action[:state_len]
         right_action = action[state_len:]
 
-        print('left_action: ', left_action)
-        print('right_action: ', right_action)
-
-        # TODO need to write the actions to the ml_bridge
-        # self.puppet_bot_left.arm.set_joint_positions(left_action[:6], blocking=False)
-        # self.puppet_bot_right.arm.set_joint_positions(right_action[:6], blocking=False)
-        # self.set_gripper_pose(left_action[-1], right_action[-1])
-        
-        print('grippers : ', left_action[-1], right_action[-1])
         self.bridge.write_joint_commands(np.concatenate((left_action, right_action)))
 
         time.sleep(DT)
