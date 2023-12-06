@@ -23,6 +23,7 @@ OBSERVATIONS_FILE_SIZE = OBSERVATION_BUFFER_ENTRY_SIZE * OBSERVATION_BUFFER_ENTR
 class MLBridge:
     def __init__(self):
         self.sio = socketio.SimpleClient()
+        self.sim_state = [0.0]
     
     def open(self):
         self.sio.connect('http://0.0.0.0:5555')
@@ -88,6 +89,7 @@ class MLBridge:
             if message == 'reset_completed':
                 return data['reward']
     
+
     def read_observations(self) -> dict:
         observations = dict()
         images = dict()
@@ -97,9 +99,10 @@ class MLBridge:
         end = start + OBSERVATION_BUFFER_ENTRY_SIZE
         data = self.observations_mmap[start:end]
         qpos = struct.unpack('d'*14, data[0:14*8])
+        sim_state = struct.unpack('d'*1, data[14*8:15*8])
         camera_array = []
         for i in range(4):
-            start = 8*14 + i*OBSERVATION_IMAGE_SIZE
+            start = 9*14 + i*OBSERVATION_IMAGE_SIZE
             end = start + OBSERVATION_IMAGE_SIZE
             camera_array.append(np.frombuffer(data[start:end], dtype=np.uint8).reshape((480, 640, 3)))
 
@@ -111,7 +114,8 @@ class MLBridge:
         observations['qpos'] = np.array(qpos)
         observations['images'] = images
             
-        return observations
+        return observations, sim_state
+
     
     def write_joint_commands(self, joint_commands: np.array):
         #  Convert the joint_commands to bytes using struct.pack

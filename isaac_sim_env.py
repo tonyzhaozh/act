@@ -40,6 +40,7 @@ class IsaacSimEnv:
         self.bridge = MLBridge()
         self.bridge.open()
         self.qpos = np.zeros(14)
+        self.sim_state = [0.0]
 
     def setup_robots(self):
         pass
@@ -54,7 +55,7 @@ class IsaacSimEnv:
         return np.zeros(14)
 
     def get_images(self):
-        observations = self.bridge.read_observations()
+        observations, self.sim_state = self.bridge.read_observations()
 
         self.qpos = observations['qpos']
         return observations['images']
@@ -89,7 +90,7 @@ class IsaacSimEnv:
         return obs
 
     def get_reward(self):
-        return 0  # Should probably have the isaac gym get the reward here.
+        return self.sim_state[0]
 
     def reset(self, fake=False):
         reward = self.bridge.reset_sim()
@@ -108,8 +109,10 @@ class IsaacSimEnv:
         self.bridge.write_joint_commands(np.concatenate((left_action, right_action)))
 
         time.sleep(DT)
+        # this also reads in the reward so make sure to call it before self.get_reward()
+        observation = self.get_observation()
         return dm_env.TimeStep(
             step_type=dm_env.StepType.MID,
             reward=self.get_reward(),
             discount=None,
-            observation=self.get_observation())
+            observation=observation)

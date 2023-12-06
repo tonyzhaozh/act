@@ -21,6 +21,8 @@ from sim_env import BOX_POSE
 import IPython
 e = IPython.embed
 
+torch.cuda.empty_cache()
+
 def main(args):
     set_seed(1)
     # command line parameters
@@ -96,6 +98,7 @@ def main(args):
         results = []
         for ckpt_name in ckpt_names:
             success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True)
+            print('your success rate ', success_rate, avg_return)
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -190,8 +193,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     elif is_isaac_sim:
         from isaac_sim_robot_utils import make_isaac_sim_env, move_grippers
         env = make_isaac_sim_env()
-        env_max_reward = 0
-        pass
+        env_max_reward = 1
     else:
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
