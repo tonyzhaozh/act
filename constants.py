@@ -33,7 +33,8 @@ SIM_TASK_CONFIGS = {
     'sim_stack_block_scripted': {
         'dataset_dir': DATA_DIR + '/stack_block',
         'num_episodes': 5,
-        'episode_len': 100,
+        'episode_len': 300,
+        # 'episode_len': 100,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
     },
 }

@@ -2,7 +2,9 @@ import mmap
 import struct
 import numpy as np
 from typing import Tuple
-import os
+import socketio
+# import logging
+# import threading
 
 MMAP_JOINT_POSE_COMMAND_PATH = "/tmp/ark_joint_commands"
 MMAP_OBSERVATIONS_PATH = "/tmp/ark_observations"
@@ -16,23 +18,24 @@ OBSERVATIONS_FILE_SIZE = OBSERVATION_BUFFER_ENTRY_SIZE * OBSERVATION_BUFFER_ENTR
 # IMPORTANT YOU MUST HAVE LOTS OF RAM OR ENABLE OVERCOMMIT MEMORY ON THE RUNNING MACHINE
 # the following command should return 1 if it doesn't you need to enable overcommit
 # cat /proc/sys/vm/overcommit_memory
+
+
 class MLBridge:
     def __init__(self):
-        pass
+        self.sio = socketio.SimpleClient()
     
     def open(self):
-        # for file_with_info in [(MMAP_OBSERVATIONS_PATH, OBSERVATIONS_FILE_SIZE), (MMAP_JOINT_POSE_COMMAND_PATH, JOINT_POSE_FILE_SIZE)]:
-        #     filename, file_size = file_with_info
-        #     with open(filename, "wb") as f:
-        #         f.seek(file_size - 1)
-        #         f.write(b'\0')
-        #         print('created file ', filename, ' with size ', f.tell())
-
+        self.sio.connect('http://0.0.0.0:5555')
         with open(MMAP_JOINT_POSE_COMMAND_PATH, "r+b") as f:
             self.joint_pos_commands_mmap = mmap.mmap(f.fileno(), JOINT_POSE_FILE_SIZE)
         with open(MMAP_OBSERVATIONS_PATH, "r") as f:
             self.observations_mmap = mmap.mmap(f.fileno(), OBSERVATIONS_FILE_SIZE, access=mmap.ACCESS_READ)
-
+    
+    def _setup_socketio(self):
+        self.sio = socketio.Server(cors_allowed_origins="*", async_mode='threading')
+        # self.sio.on('reset', self._handle_reset)
+        # self.app = Flask("vr_server")
+        # self.app.wsgi_app = socketio.WSGIApp(self.sio, self.app.wsgi_app)
 
     def read_joint_command(self, joint_index):
         # Check if the joint index is valid
@@ -74,6 +77,16 @@ class MLBridge:
         start = entry_index * OBSERVATION_BUFFER_ENTRY_SIZE
         self.observations_mmap[start:start+len(data)] = data
         self.observations_mmap[-1] = entry_index  # Update the current index
+    
+    def reset_sim(self) -> float:
+        self.sio.emit('reset')
+        reset_completed = self.sio.receive(timeout=5)
+
+        if reset_completed is not None:
+            message, data = reset_completed
+
+            if message == 'reset_completed':
+                return data['reward']
     
     def read_observations(self) -> dict:
         observations = dict()

@@ -37,71 +37,25 @@ class IsaacSimEnv:
     """
 
     def __init__(self, setup_robots=True):
-        # self.puppet_bot_left = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper",
-        #                                                robot_name=f'puppet_left', init_node=init_node)
-        # self.puppet_bot_right = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper",
-        #                                                 robot_name=f'puppet_right', init_node=False)
-        # if setup_robots:
-        #     self.setup_robots()
-
-        # self.recorder_left = Recorder('left', init_node=False)
-        # self.recorder_right = Recorder('right', init_node=False)
-        # self.image_recorder = ImageRecorder(init_node=False)
-        # self.gripper_command = JointSingleCommand(name="gripper")
-
         self.bridge = MLBridge()
         self.bridge.open()
         self.qpos = np.zeros(14)
-        
-        pass
 
     def setup_robots(self):
-        # setup_puppet_bot(self.puppet_bot_left)
-        # setup_puppet_bot(self.puppet_bot_right)
         pass
 
     def get_qpos(self):
-        # left_qpos_raw = self.recorder_left.qpos
-        # right_qpos_raw = self.recorder_right.qpos
-        # left_arm_qpos = left_qpos_raw[:6]
-        # right_arm_qpos = right_qpos_raw[:6]
-        # left_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(left_qpos_raw[7])] # this is position not joint
-        # right_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(right_qpos_raw[7])] # this is position not joint
-        # return np.concatenate([left_arm_qpos, left_gripper_qpos, right_arm_qpos, right_gripper_qpos])
-        # return np.zeros(14)
-        # if self.qpos is None:
-        #     self.qpos = self.bridge.read_all_joint_commands()
         return self.qpos
 
     def get_qvel(self):
-        # left_qvel_raw = self.recorder_left.qvel
-        # right_qvel_raw = self.recorder_right.qvel
-        # left_arm_qvel = left_qvel_raw[:6]
-        # right_arm_qvel = right_qvel_raw[:6]
-        # left_gripper_qvel = [PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN(left_qvel_raw[7])]
-        # right_gripper_qvel = [PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN(right_qvel_raw[7])]
-        # return np.concatenate([left_arm_qvel, left_gripper_qvel, right_arm_qvel, right_gripper_qvel])
         return np.zeros(14)
 
     def get_effort(self):
-        # left_effort_raw = self.recorder_left.effort
-        # right_effort_raw = self.recorder_right.effort
-        # left_robot_effort = left_effort_raw[:7]
-        # right_robot_effort = right_effort_raw[:7]
-        # return np.concatenate([left_robot_effort, right_robot_effort])
         return np.zeros(14)
 
     def get_images(self):
         observations = self.bridge.read_observations()
-        
-        # return self.image_recorder.get_images()
-        
-        # !!! this basically calls this so return the dict like that with the images.
-        # def get_images(self):
-        #     image_dict = dict()
-        #     for cam_name in self.camera_names:
-        #         image_dict[cam_name] = getattr(self, f'{cam_name}_image')
-        #     return image_dict
+
         self.qpos = observations['qpos']
         return observations['images']
 
@@ -135,17 +89,14 @@ class IsaacSimEnv:
         return obs
 
     def get_reward(self):
-        return 0
+        return 0  # Should probably have the isaac gym get the reward here.
 
     def reset(self, fake=False):
-        print('reset called this should probably tell isaac sim to reset as well')
-        #     self.puppet_bot_left.dxl.robot_reboot_motors("single", "gripper", True)
-        #     self.puppet_bot_right.dxl.robot_reboot_motors("single", "gripper", True)
-        #     self._reset_joints()
-        #     self._reset_gripper()
+        reward = self.bridge.reset_sim()
         return dm_env.TimeStep(
             step_type=dm_env.StepType.FIRST,
-            reward=self.get_reward(),
+            # reward=self.get_reward(),
+            reward=reward,
             discount=None,
             observation=self.get_observation())
 
