@@ -81,6 +81,9 @@ class MLBridge:
     
     def reset_sim(self) -> float:
         self.sio.emit('reset')
+        # do this twice to flush the whole interprocess communication circular buffer.
+        self.write_joint_commands(np.zeros(14))
+        self.write_joint_commands(np.zeros(14))
         reset_completed = self.sio.receive(timeout=5)
 
         if reset_completed is not None:
@@ -89,7 +92,6 @@ class MLBridge:
             if message == 'reset_completed':
                 return data['reward']
     
-
     def read_observations(self) -> dict:
         observations = dict()
         images = dict()
@@ -115,8 +117,7 @@ class MLBridge:
         observations['images'] = images
             
         return observations, sim_state
-
-    
+   
     def write_joint_commands(self, joint_commands: np.array):
         #  Convert the joint_commands to bytes using struct.pack
         joint_commands_bytes = struct.pack('14d', *joint_commands)
