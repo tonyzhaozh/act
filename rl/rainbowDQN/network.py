@@ -8,6 +8,8 @@ import torchvision.models as models
 import IPython
 e = IPython.embed
 
+EPS = 1e-5
+
 class NoisyLinear(nn.Module):
     """Noisy linear module for NoisyNet.
     
@@ -161,14 +163,18 @@ class Network(nn.Module):
 
     def update_norm_stats(self, norm_stats: dict):
         self.states_mean.copy_(torch.from_numpy(norm_stats['states_mean']))
-        self.states_std.copy_(torch.from_numpy(norm_stats['states_std']))
+        self.states_std.copy_(torch.from_numpy(norm_stats['states_std'] + EPS))
 
     def dist(self, x: torch.Tensor) -> torch.Tensor:
         """Get distribution for atoms."""
+        #print(f"x_org = {x}")
+        #print(f"{self.states_std=}. {self.states_mean=}")
         x = (x - self.states_mean) / self.states_std  # normalization
+        #print(f"{x=}")
 
         if self.use_state:
             feature = self.feature_layer(x)
+            #print(f"{feature=}")
         else:
             raise NotImplementedError
 
@@ -180,7 +186,9 @@ class Network(nn.Module):
         )
         value = self.value_layer(val_hid).view(-1, 1, self.atom_size)
         q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
-        
+
+        #print(f"{adv_hid=}, {val_hid=}, {advantage=}, {value=}, {q_atoms=}")
+
         dist = F.softmax(q_atoms, dim=-1)
         dist = dist.clamp(min=1e-3)  # for avoiding nans
         

@@ -63,6 +63,8 @@ def get_args_parser():
     parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+    parser.add_argument('--learned-policy', action='store_true')
+    parser.add_argument('--new', action='store_true')
 
     # for interpolation (not used)
     parser.add_argument('--interpolation_speed', action='store', type=float, required=False)

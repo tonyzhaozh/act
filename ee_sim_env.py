@@ -17,6 +17,7 @@ import IPython
 e = IPython.embed
 
 DISABLE_RENDER = [False]
+DISABLE_RANDOM = [False]
 
 def make_ee_sim_env(task_name):
     """
@@ -39,13 +40,13 @@ def make_ee_sim_env(task_name):
     if 'sim_transfer_cube' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
-        task = TransferCubeEETask(random=False)
+        task = TransferCubeEETask(random=False, single_reward=True)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
     elif 'sim_insertion' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_insertion.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
-        task = InsertionEETask(random=False)
+        task = InsertionEETask(random=False, single_reward=True)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
     elif 'sim_transfer_tea_bag' in task_name:
@@ -142,11 +143,12 @@ class BimanualViperXEETask(base.Task):
         obs['qvel'] = self.get_qvel(physics)
         obs['env_state'] = self.get_env_state(physics)
 
-        if not DISABLE_RENDER:
+        if not DISABLE_RENDER[0]:
             obs['images'] = dict()
             obs['images']['top'] = physics.render(height=480, width=640, camera_id='top')
             obs['images']['angle'] = physics.render(height=480, width=640, camera_id='angle')
             obs['images']['vis'] = physics.render(height=480, width=640, camera_id='front_close')
+
         # used in scripted policy to obtain starting pose
         obs['mocap_pose_left'] = np.concatenate([physics.data.mocap_pos[0], physics.data.mocap_quat[0]]).copy()
         obs['mocap_pose_right'] = np.concatenate([physics.data.mocap_pos[1], physics.data.mocap_quat[1]]).copy()
@@ -160,9 +162,14 @@ class BimanualViperXEETask(base.Task):
 
 
 class TransferCubeEETask(BimanualViperXEETask):
-    def __init__(self, random=None):
+    def __init__(self, random=None, single_reward = False):
         super().__init__(random=random)
-        self.max_reward = 4
+        self.single_reward = single_reward
+        if not single_reward:
+            self.max_reward = 4
+        else:
+            self.max_reward = 100
+            self.history_reward = 0
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -172,6 +179,8 @@ class TransferCubeEETask(BimanualViperXEETask):
         box_start_idx = physics.model.name2id('red_box_joint', 'joint')
         np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
         # print(f"randomized cube position to {cube_position}")
+
+        self.history_reward = 0
 
         super().initialize_episode(physics)
 
@@ -197,20 +206,32 @@ class TransferCubeEETask(BimanualViperXEETask):
 
         reward = 0
         if touch_right_gripper:
-            reward = 1
+            reward = 1 if not self.single_reward else 0
         if touch_right_gripper and not touch_table: # lifted
-            reward = 2
+            reward = 2 if not self.single_reward else 0
         if touch_left_gripper: # attempted transfer
-            reward = 3
+            reward = 3 if not self.single_reward else 0
         if touch_left_gripper and not touch_table: # successful transfer
-            reward = 4
+            reward = 4 if not self.single_reward else 100
+
+        if self.single_reward:
+            if reward > self.history_reward:
+                self.history_reward = reward
+            else:
+                reward = 0
+
         return reward
 
 
 class InsertionEETask(BimanualViperXEETask):
-    def __init__(self, random=None):
+    def __init__(self, random=None, single_reward = False):
         super().__init__(random=random)
-        self.max_reward = 4
+        self.single_reward = single_reward
+        if not single_reward:
+            self.max_reward = 4
+        else:
+            self.max_reward = 100
+            self.history_reward = 0
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -228,6 +249,8 @@ class InsertionEETask(BimanualViperXEETask):
         socket_start_idx = id2index(socket_start_id)
         np.copyto(physics.data.qpos[socket_start_idx : socket_start_idx + 7], socket_pose)
         # print(f"randomized cube position to {cube_position}")
+
+        self.history_reward = 0
 
         super().initialize_episode(physics)
 
@@ -266,13 +289,20 @@ class InsertionEETask(BimanualViperXEETask):
 
         reward = 0
         if touch_left_gripper and touch_right_gripper: # touch both
-            reward = 1
+            reward = 1 if not self.single_reward else 0
         if touch_left_gripper and touch_right_gripper and (not peg_touch_table) and (not socket_touch_table): # grasp both
-            reward = 2
+            reward = 2 if not self.single_reward else 0
         if peg_touch_socket and (not peg_touch_table) and (not socket_touch_table): # peg and socket touching
-            reward = 3
+            reward = 3 if not self.single_reward else 0
         if pin_touched: # successful insertion
-            reward = 4
+            reward = 4 if not self.single_reward else 100
+
+        if self.single_reward:
+            if reward > self.history_reward:
+                self.history_reward = reward
+            else:
+                reward = 0
+
         return reward
 
 
@@ -280,7 +310,7 @@ class InsertionEETask(BimanualViperXEETask):
 class TransferTeaBagEETask(BimanualViperXEETask):
     def __init__(self, random=None):
         super().__init__(random=random)
-        self.max_reward = 3
+        self.max_reward = 100
         self.history_reward = 0
 
     def initialize_episode(self, physics):
@@ -288,9 +318,21 @@ class TransferTeaBagEETask(BimanualViperXEETask):
         self.initialize_robots(physics)
         # randomize box position
         cube_pose = np.array([0.15, 0.5, 0.05, 1, 0, 0, 0])
+
+        test_pose = None
+        # test_pose = np.array([0.2361552 , 0.42309808, 0.05, 1, 0, 0, 0])
+
+        if not DISABLE_RANDOM[0]:
+            random_scale = 0.05
+            noise = np.concatenate((np.random.uniform(low = -random_scale, high = random_scale, size=(2,)), np.array([0, 0, 0, 0, 0])))
+            cube_pose += noise
+
+        if test_pose is not None:
+            cube_pose = test_pose
+
         box_start_idx = physics.model.name2id('red_box_joint', 'joint')
         np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
-        # print(f"randomized cube position to {cube_position}")
+        #print(f"randomized cube position to {cube_pose} starting in {box_start_idx}")
 
         self.history_reward = 0
 

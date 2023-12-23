@@ -4,19 +4,24 @@ import os
 import json
 import random
 import h5py
+import cv2
 from torch.utils.data import TensorDataset, DataLoader
+#from torchvision.transforms import v2
+import matplotlib.pyplot as plt
 
 import IPython
 e = IPython.embed
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, seed=0, use_augmentation=False):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
+        self.seed = seed
+        self.use_augmentation = use_augmentation
         self.__getitem__(0) # initialize self.is_sim
 
     def __len__(self):
@@ -25,13 +30,15 @@ class EpisodicDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         sample_full_episode = False # hardcode
 
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.manual_seed(seed)
+        #seed = self.seed
+        #np.random.seed(seed)
+        #random.seed(seed)
+        #torch.manual_seed(seed)
         if torch.backends.cudnn.enabled:
-            torch.cuda.manual_seed(seed)
-            torch.backends.cudnn.benchmark = False
-            torch.backends.cudnn.deterministic = Trueode_id = self.episode_ids[index]
+            #torch.cuda.manual_seed(seed)
+            torch.backends.cudnn.benchmark = True
+            #torch.backends.cudnn.deterministic = True
+            episode_id = self.episode_ids[index]
             dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
             with h5py.File(dataset_path, 'r') as root:
                 is_sim = root.attrs['sim']
@@ -41,12 +48,15 @@ class EpisodicDataset(torch.utils.data.Dataset):
                     start_ts = 0
                 else:
                     start_ts = np.random.choice(episode_len)
+                #print(f'{start_ts=}')
                 # get observation at start_ts only
+                compressed = root.attrs.get('compress', False)
                 qpos = root['/observations/qpos'][start_ts]
                 qvel = root['/observations/qvel'][start_ts]
                 image_dict = dict()
                 for cam_name in self.camera_names:
                     image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+
                 # get all actions after and including start_ts
                 if is_sim:
                     action = root['/action'][start_ts:]
@@ -54,6 +64,14 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 else:
                     action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
                     action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+
+            if compressed:
+                for cam_id, cam_name in enumerate(image_dict.keys()):
+                    # un-pad and uncompress
+                    padded_compressed_image = image_dict[cam_name]
+                    compressed_image = padded_compressed_image
+                    image = cv2.imdecode(compressed_image, 1)
+                    image_dict[cam_name] = image
 
             self.is_sim = is_sim
             padded_action = np.zeros(original_action_shape, dtype=np.float32)
@@ -64,7 +82,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
             # new axis for different cameras
             all_cam_images = []
             for cam_name in self.camera_names:
-                all_cam_images.append(image_dict[cam_name])
+                image = image_dict[cam_name]
+                if self.use_augmentation:
+                    image = augment_image(image)
+                all_cam_images.append(image)
             all_cam_images = np.stack(all_cam_images, axis=0)
 
             # construct observations
@@ -128,7 +149,7 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, use_augmentation=False)
     val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
@@ -174,6 +195,15 @@ def sample_insertion_pose():
 
     return peg_pose, socket_pose
 
+def sample_teabag_pose():
+    cube_pose = np.array([0.15, 0.5, 0.05, 1, 0, 0, 0])
+    random_scale = 0.05
+    noise = np.concatenate(
+        (np.random.uniform(low=-random_scale, high=random_scale, size=(2,)), np.array([0, 0, 0, 0, 0])))
+    cube_pose += noise
+
+    return cube_pose
+
 ### helper functions
 
 def compute_dict_mean(epoch_dicts):
@@ -199,16 +229,26 @@ def set_seed(seed):
     random.seed(seed)
 
 
-def interpolate_by_step(raw, step, max_length = None, with_batch = True):
+def interpolate_by_step(raw, step, max_length = None, with_batch = True, step0_pos = None):
     # raw: numpy array of shape (N, 14)
     # step: a positive real number signifying the step length
     # interpolate the raw data of shape (14, )
+    target_device = "cuda" if torch.cuda.is_available() else "cpu"
+
     if step < 1e-8:
         raise ValueError('Invalid step size')
+    if step < 1.0 and step0_pos is None:
+        raise ValueError('Must have current position for step < 1 ')
 
     if with_batch:
         assert raw.shape[0] == 1
         raw = raw.squeeze(0)
+
+    if step0_pos is not None:
+        assert step0_pos.shape==(1, 14)
+        raw = torch.concatenate((step0_pos, raw), dim=0)
+    else:
+        raw = torch.concatenate((torch.zeros((1, 14), device = target_device), raw), dim=0)
 
     if isinstance(raw, list):
         raw = torch.tensor(raw)
@@ -220,7 +260,7 @@ def interpolate_by_step(raw, step, max_length = None, with_batch = True):
     n = raw.shape[0]  # Number of rows in raw data
 
     out = []
-    cnt = 0.0
+    cnt = 0.0 + step
     while cnt < n - 1 + 1e-8:
         start_idx = int(cnt)
         end_idx = min(start_idx + 1, n - 1)
@@ -246,6 +286,22 @@ def interpolate_by_step(raw, step, max_length = None, with_batch = True):
         out_tensor = out_tensor.unsqueeze(0)
     
     return out_tensor
+
+def interpolate_single(t, raw):
+    lb = int(t)
+    ub = int(t) + 1
+    if t - lb < 1e-3:
+        return raw[lb]
+    if ub - t < 1e-3:
+        return raw[ub]
+
+    start_point = raw[lb]
+    end_point = raw[ub]
+
+    fraction = t - lb
+    interpolated_point = start_point + fraction * (end_point - start_point)
+    return interpolated_point
+
 
 
 def sample_speed(minVal = 0.1, maxVal = 10.0):
@@ -278,6 +334,24 @@ def append_results(entry, filename):
     # Write the updated data back to the file
     with open(filename, 'w') as file:
         json.dump(existing_data, file)
+
+
+def augment_image(image, threshold = 0.3):
+    plt.plot(image)
+    raise NotImplementedError
+
+
+def get_task_config(task_name):
+    if task_name == "multitask":
+        raise ValueError
+    is_sim = task_name[:4] == 'sim_'
+    if is_sim:
+        from constants import SIM_TASK_CONFIGS
+        task_config = SIM_TASK_CONFIGS[task_name]
+    else:
+        from aloha_scripts.constants import TASK_CONFIGS
+        task_config = TASK_CONFIGS[task_name]
+    return task_config
 
 
 # testing purpose

@@ -4,9 +4,10 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 import h5py
+from tqdm import tqdm
 
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN, SIM_TASK_CONFIGS
-from ee_sim_env import make_ee_sim_env
+from ee_sim_env import make_ee_sim_env, DISABLE_RENDER
 from sim_env import make_sim_env, BOX_POSE
 from scripted_policy import PickAndTransferPolicy, InsertionPolicy, PickAndTransferTeaBagPolicy
 
@@ -45,7 +46,7 @@ def main(args):
         raise NotImplementedError
 
     success = []
-    for episode_idx in range(num_episodes):
+    for episode_idx in tqdm(range(num_episodes)):
         print(f'{episode_idx=}')
         print('Rollout out EE space scripted policy')
         # setup the environment

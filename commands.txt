@@ -18,6 +18,76 @@ conda activate aloha
 cd ~/interbotix_ws/src/aloha/aloha_scripts
 python3 sleep.py
 
+# sim cube baseline
+
+python3 imitate_episodes.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_cube_scripted \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name sim_transfer_cube_scripted --seed 0 \
+--num_epochs 5000  --lr 1e-5
+
+
+
+# teabag
+
+python3 record_sim_episodes.py --task_name sim_transfer_tea_bag_scripted --dataset_dir /scr2/tonyzhao/datasets/sim_transfer_tea_bag_scripted --num_episodes 50
+python visualize_episodes.py \
+--dataset_dir /scr2/tonyzhao/datasets/sim_transfer_tea_bag_scripted \
+--episode_idx 0
+python3 imitate_episodes.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--num_epochs 5000  --lr 1e-5
+
+python3 imitate_episodes.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--num_epochs 5000  --lr 1e-5 --eval --onscreen_render --temporal_agg
+
+
+python3 policy_speed_env.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--num_epochs 5000  --lr 1e-5
+
+
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --learned-policy
+
+# food prep
+python3 imitate_episodes.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_food_prep \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name aloha_food_prep --seed 0 \
+--num_epochs 5000  --lr 1e-5
+
+# rl on food prep
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_food_prep \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name aloha_food_prep --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --learned-policy
+
+python3 imitate_episodes.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/aloha_throw \
+--policy_class ACT --kl_weight 80 --chunk_size 100 --hidden_dim 512 --batch_size 4 --dim_feedforward 3000 \
+--task_name aloha_throw --seed 0 \
+--num_epochs 5000  --lr 1e-5
+
+
+ython3 run_speed_rl.py --ckpt_dir /scr2/tonyzhao/train_logs/aloha_food_prep --kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 --task_name aloha_food_prep_full --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --learned-policy
+
+
+
+
 
 
 

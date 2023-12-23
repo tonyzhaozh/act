@@ -12,7 +12,7 @@ import numpy as np
 from typing import Deque, Dict, Tuple, List
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import os
+import os, math
 from datetime import datetime
 from uniplot import plot
 from colorama import Fore, Back, Style
@@ -59,6 +59,9 @@ class DQNAgent:
         gamma: float = 0.97,
         tau: float = 0.5,
         frame_skip: int = 10,
+        hidden_dim = 256,
+        is_sim = True,
+        is_test = False,
 
         # exploration
         epsilon: float = 1.0,
@@ -66,7 +69,7 @@ class DQNAgent:
         min_epsilon = 0.6,
         hard_exploration_steps = 0,
         #exploration_steps = 1000,
-        exploration_steps = 0,
+        exploration_steps = 1000,
 
         # PER parameters
         alpha: float = 0.2,
@@ -84,9 +87,10 @@ class DQNAgent:
 
         # Logs
         log_dir = None,
-        file_path = None,
+        model_path = None,
         name = "",
-        ckpt_save_freq = None
+        ckpt_save_freq = None,
+
 
     ):
         """Initialization.
@@ -158,10 +162,10 @@ class DQNAgent:
 
         # networks: dqn, dqn_target
         self.dqn = Network(
-            obs_dim, action_dim, self.atom_size, self.support
+            obs_dim, action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
         ).to(self.device)
         self.dqn_target = Network(
-            obs_dim, action_dim, self.atom_size, self.support
+            obs_dim, action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
         ).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
@@ -173,18 +177,20 @@ class DQNAgent:
         self.transition = list()
         
         # mode: train / test
-        self.is_test = False
+        self.is_test = is_test
 
         # logging
         self.name = name
-        self.writer = SummaryWriter(log_dir + os.sep + datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + name )
+        if not self.is_test:
+            self.writer = SummaryWriter(log_dir + os.sep + datetime.now().strftime("%Y%m%d-%H%M%S") + '_' + name )
         self.ckpt_save_freq = ckpt_save_freq
+        self.model_path = model_path
 
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
 
         if np.random.uniform() < self.epsilon and not self.is_test:
-            selected_action = 0
+            selected_action = 1
         else:
             # NoisyNet: no epsilon greedy action selection
             q_values = self.dqn(
@@ -199,6 +205,8 @@ class DQNAgent:
 
         if not self.is_test:
             self.transition = [state, selected_action]
+
+        #print("Action:", state, selected_action)
         
         return selected_action
 
@@ -233,7 +241,7 @@ class DQNAgent:
             if one_step_transition:
                 self.memory.store(*one_step_transition)
         add_to_buffer_time = time() - t0
-        info = {'success': success, 'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
+        info = {'success': success, 'finish': info['finish'], 'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
     
         return next_state, reward, done, info
 
@@ -251,6 +259,8 @@ class DQNAgent:
         
         # PER: importance sampling before average
         loss = torch.mean(elementwise_loss * weights)
+
+        #print(samples, elementwise_loss, loss)
         
         # N-step Learning loss
         # we are gonna combine 1-step loss and n-step loss so as to
@@ -290,7 +300,7 @@ class DQNAgent:
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.min_epsilon)
 
         
-    def train(self, num_frames: int, plotting_interval: int = 200):
+    def train(self, num_frames: int, plotting_interval: int = 1):
         """Train the agent."""
         self.is_test = False
         
@@ -314,9 +324,12 @@ class DQNAgent:
             inference_time.append(time() - t0)
 
             next_state, reward, done, info = self.step(action, self.frame_skip)
+            #print(next_state, reward, done, info, self.frame_skip)
+
             env_step_time.append(info['env_step_time'])
             add_to_buffer_time.append(info['add_to_buffer_time'])
             success = info['success']
+            force_finish = info['finish']
 
             state = next_state
             episode_return += reward
@@ -334,21 +347,25 @@ class DQNAgent:
             # if episode ends
             if done:
                 episode_cnt += 1
-                episode_length = (frame_idx - prev_frame_idx) * self.frame_skip   # real episode length
+                episode_length = frame_idx - prev_frame_idx
+                physical_episode_length = episode_length * self.frame_skip   # real episode length
 
                 self.writer.add_scalar("Performance/Return", episode_return, episode_cnt)
                 self.writer.add_scalar("Metrics/Length", episode_length, episode_cnt)
+                self.writer.add_scalar("Metrics/Physical Length", physical_episode_length, episode_cnt)
                 self.writer.add_scalar("Performance/Success", 1 if success else 0, episode_cnt)
                 if success:
                     self.writer.add_scalar("Metrics/Success Length", episode_length, episode_cnt)
+                    self.writer.add_scalar("Metrics/Physical Success Length", physical_episode_length, episode_cnt)
                     self.writer.add_scalar("Metrics/Success Return", episode_return, episode_cnt)
 
                 prev_frame_idx = frame_idx
-                state = self.env.reset()
                 #state, _ = self.env.reset(seed=self.seed)
 
             # if training is ready
             if len(self.memory) >= self.batch_size and done:
+                print("Updating")
+
                 # calculate up-to-date normalization stats every batch
                 t0 = time()
                 all_states = np.array(states_history)
@@ -363,7 +380,9 @@ class DQNAgent:
 
                 t0 = time()
                 # update_num = min(200, len(self.memory) // self.batch_size // 2) # TODO Tune
-                update_num = episode_length
+                update_cnt_factor = min(5, int(math.sqrt(num_frames / frame_idx)))
+                update_size_limit = int(len(self.memory) / self.batch_size) + 1
+                update_num = min(int(episode_length * update_cnt_factor), update_size_limit)
 
                 total_loss = 0
                 for _ in range(update_num):
@@ -379,6 +398,8 @@ class DQNAgent:
 
                 avg_loss = total_loss / episode_length
                 orig_len = self.env.episode_len / self.frame_skip
+                physical_orig_len = self.env.episode_len
+
                 self.writer.add_scalar("Metrics/Loss", avg_loss, episode_cnt)
 
                 # terminal visualizations
@@ -386,9 +407,21 @@ class DQNAgent:
                     style = Fore.GREEN
                 else:
                     style = Fore.RED
-                print(style + f"Episode {episode_cnt} (total frame {frame_idx}) | Success: {success} Return: {episode_return:.2f} Episode len: {episode_length}/{orig_len}({orig_len/episode_length:.2f}x) | Loss: {avg_loss:.2f} Eps: {self.epsilon:.2f}", Style.RESET_ALL)
-                plot(episode_action, x_max=orig_len, x_min = 0, y_min = 0, y_max = self.env.speed_slot_num, title=f"Episode {episode_cnt} speed")
+                if episode_cnt % plotting_interval == 0:
+                    plot(episode_action, x_max=orig_len, x_min=0, y_min=0, y_max=self.env.speed_slot_num,
+                         title=f"Episode {episode_cnt} speed")
+                print(style + f"Episode {episode_cnt} (total frame {frame_idx}) | Success: {success} Return: {episode_return:.2f} Episode len: {physical_episode_length}/{physical_orig_len}({orig_len/episode_length:.2f}x) | Loss: {avg_loss:.2f} Eps: {self.epsilon:.2f}", Style.RESET_ALL)
                 print(f'env_step_time: {sum(env_step_time):.2f}s, add_to_buffer_time: {sum(add_to_buffer_time):.2f}s, training_time: {sum(training_time):.2f}s({update_num}steps), inference_time: {sum(inference_time):.2f}s\n\n')
+            elif done:
+                print(f"Collecting initial distribution ({len(self.memory)}/{self.batch_size})")
+
+            if self.ckpt_save_freq and frame_idx % self.ckpt_save_freq == 0 and frame_idx != 0:
+                 self.save(self.model_path)
+
+            if force_finish:
+                print(f"Finishing training early ({frame_idx}/{num_frames}).")
+                self.env.close()
+                return 1 if frame_idx >= 100 else 0
 
             if done:
                 episode_return = 0
@@ -397,18 +430,13 @@ class DQNAgent:
                 add_to_buffer_time = []
                 training_time = []
                 inference_time = []
+                state = self.env.reset()
 
-            # TODO(Tony) add back
-            # if self.ckpt_save_freq and frame_idx % self.ckpt_save_freq == 0:
-            #     print("Saving Checkpoint")
-            #     self.save("dynamic_act_speed_rainbow/" + "ckpt_" + repr(frame_idx) + "_" + self.name)
-   
-                
         self.env.close()
+        return 1
                 
     def test(self, num_tests, test_max_length = 500, video_folder: str = None) -> None:
         """Test the agent."""
-        raise NotImplementedError
         self.is_test = True
         
         # for recording a video
@@ -454,6 +482,8 @@ class DQNAgent:
         reward = torch.FloatTensor(samples["rews"].reshape(-1, 1)).to(device)
         done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
 
+        #print(device, state, next_state, action, reward, done)
+
         # Categorical DQN algorithm
         delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1)
 
@@ -462,6 +492,8 @@ class DQNAgent:
             next_action = self.dqn(next_state).argmax(1)
             next_dist = self.dqn_target.dist(next_state)
             next_dist = next_dist[range(self.batch_size), next_action]
+
+            #print(next_action, next_dist)
 
             t_z = reward + (1 - done) * gamma * self.support
             t_z = t_z.clamp(min=self.v_min, max=self.v_max)
@@ -486,11 +518,18 @@ class DQNAgent:
                 0, (u + offset).view(-1), (next_dist * (b - l.float())).view(-1)
             )
 
+            #print(offset)
+            #print(proj_dist)
+
         dist = self.dqn.dist(state)
         log_p = torch.log(dist[range(self.batch_size), action])
+
+        #print(log_p)
+
         elementwise_loss = -(proj_dist * log_p).sum(1)
 
         return elementwise_loss
+
 
     def _target_hard_update(self):
         """Hard update: target <- local."""
@@ -505,11 +544,22 @@ class DQNAgent:
                 self.tau * local_param.data + (1.0 - self.tau) * target_param.data
             )
 
-    def save(self, filename: str):
+    def save(self, file_name: str):
         """Save trained model."""
-        torch.save(self.dqn.state_dict(), f"{filename}_dqn.pth")
+        print(f"Saving model to {file_name}")
+        torch.save(self.dqn.state_dict(), f"{file_name}_dqn.pth")
+        self.memory.save(f"{file_name}_memory.npz")
+        if self.use_n_step:
+            self.memory_n.save(f"{file_name}_memory_n.npz")
 
-    def load(self, filename: str):
+
+    def load(self, file_name: str):
         """Load trained model."""
-        self.dqn.load_state_dict(torch.load(f"{filename}_dqn.pth"))
+        self.dqn.load_state_dict(torch.load(f"{file_name}_dqn.pth"))
         self._target_hard_update()
+        try:
+            self.memory.load(f"{file_name}_memory.npz")
+            if self.use_n_step:
+                self.memory_n.load(f"{file_name}_memory_n.npz")
+        except Exception as e:
+            print("Error loading replay buffer:", e)

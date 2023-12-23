@@ -118,7 +118,6 @@ class PickAndTransferTeaBagPolicy(BasePolicy):
 
         box_xyz = box_info[:3]
         box_quat = box_info[3:]
-        #print(f"Generate trajectory for {box_xyz=}")
 
         gripper_pick_quat_org = Quaternion(init_mocap_pose_right[3:])
         gripper_pick_quat = gripper_pick_quat_org * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-90)
@@ -159,7 +158,7 @@ class PickAndTransferTeaBagPolicy(BasePolicy):
             {"t": 400, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0}, # move to meet position
             {"t": 420, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 0},  # open gripper
             {"t": 450, "xyz": meet_xyz, "quat": gripper_move_quat.elements, "gripper": 1}, # open gripper
-            {"t": 500, "xyz": init_mocap_pose_right[:3], "quat": gripper_move_quat.elements, "gripper": 1},
+            {"t": 500, "xyz": init_mocap_pose_right[:3] + np.array([-0.1, 0, -0.1]), "quat": gripper_move_quat.elements, "gripper": 1},
         ]
 
 class InsertionPolicy(BasePolicy):
@@ -279,5 +278,5 @@ def test_policy(task_name, save_video=False, speed=1.0):
 
 if __name__ == '__main__':
     test_task_name = 'sim_transfer_tea_bag_scripted'
-    test_policy(test_task_name, save_video=False, speed=5.0)
+    test_policy(test_task_name, save_video=False, speed=2.0)
 

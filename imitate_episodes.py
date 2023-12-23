@@ -8,13 +8,11 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
-import cv2
-from cv_bridge import CvBridge, CvBridgeError
 
 from constants import DT
 from constants import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # data functions
-from utils import sample_box_pose, sample_insertion_pose # robot functions
+from utils import sample_box_pose, sample_insertion_pose, sample_teabag_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from utils import interpolate_by_step, sample_speed, append_results # interpolation dev
 from policy import ACTPolicy, CNNMLPPolicy
@@ -22,8 +20,6 @@ from visualize_episodes import save_videos
 
 from sim_env import BOX_POSE
 
-import ray
-from ray.util.queue import Queue
 import time
 
 import IPython
@@ -107,7 +103,7 @@ def main(args):
         ckpt_names = [f'policy_best.ckpt'] # policy_epoch_4400_seed_0 [f'policy_epoch_22000_seed_0.ckpt'] # [f'policy_best.ckpt'] # policy_epoch_5200_seed_0 policy_last
         results = []
         for ckpt_name in ckpt_names:
-            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=False) # changed
+            success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True) # changed
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -153,51 +149,30 @@ def make_optimizer(policy_class, policy):
     return optimizer
 
 
-'''def get_image(ts, camera_names):
+def get_image(ts, camera_names):
     curr_images = []
     for cam_name in camera_names:
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
     curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
-    return curr_image'''
-
-def get_image(ts, camera_names):
-    num_cameras = len(camera_names)
-    image_shape = ts.observation['images'][camera_names[0]].shape
-
-    curr_image = np.empty((num_cameras,) + image_shape, dtype=np.float32)
-    for i, cam_name in enumerate(camera_names):
-        curr_image[i] = ts.observation['images'][cam_name]
-        
-    curr_image = curr_image.transpose(0, 3, 1, 2)
-
-    curr_image = torch.from_numpy(curr_image / 255.0).float().unsqueeze(0)
     return curr_image
 
+# def get_image(ts, camera_names):
+#     num_cameras = len(camera_names)
+#     image_shape = ts.observation['images'][camera_names[0]].shape
 
-################################
+#     curr_image = np.empty((num_cameras,) + image_shape, dtype=np.float32)
+#     for i, cam_name in enumerate(camera_names):
+#         curr_image[i] = ts.observation['images'][cam_name]
+        
+#     curr_image = curr_image.transpose(0, 3, 1, 2)
 
-ray.init()
-
-@ray.remote(num_gpus=0.1)
-class PolicyLoop:
-    def __init__(self, policy, input_queue, action_queue):
-        self.input_queue = input_queue
-        self.action_queue = action_queue
-        self.policy = policy  # Replace with your AI model initialization
-
-    def run(self):
-        while True:
-            input = self.input_queue.get()
-            t = input['t']
-            obs = input['obs'].cuda()
-            qpos = input['qpos'].cuda()
-            action = self.policy(qpos, obs)
-            self.action_queue.put({'t': t, 'action': action.cpu()})
+#     curr_image = torch.from_numpy(curr_image / 255.0).float().unsqueeze(0)
+#     return curr_image
 
 
-################################
+
 
 
 def eval_bc(config, ckpt_name, save_episode=True):
@@ -246,6 +221,31 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     # multi-threading
     if use_multi_thread:
+        ################################
+
+        import ray
+        from ray.util.queue import Queue
+
+        ray.init()
+
+        @ray.remote(num_gpus=0.1)
+        class PolicyLoop:
+            def __init__(self, policy, input_queue, action_queue):
+                self.input_queue = input_queue
+                self.action_queue = action_queue
+                self.policy = policy  # Replace with your AI model initialization
+
+            def run(self):
+                while True:
+                    input = self.input_queue.get()
+                    t = input['t']
+                    obs = input['obs'].cuda()
+                    qpos = input['qpos'].cuda()
+                    action = self.policy(qpos, obs)
+                    self.action_queue.put({'t': t, 'action': action.cpu()})
+
+        ################################
+
         ray.put(policy)
 
         # Create the communication queues
@@ -268,10 +268,15 @@ def eval_bc(config, ckpt_name, save_episode=True):
         env = make_sim_env(task_name)
         env_max_reward = env.task.max_reward
 
-    query_frequency = policy_config['num_queries']
+
     if temporal_agg:
-        query_frequency = 5
+        query_frequency = 1
         num_queries = policy_config['num_queries']
+    else:
+        query_frequency = policy_config['num_queries']
+        if interpolation_speed is not None:
+            query_frequency = int(query_frequency / interpolation_speed) - 1
+        num_queries = query_frequency
 
     max_timesteps = int(max_timesteps * 1.1) # may increase for real-world tasks
     org_max_timesteps = max_timesteps
@@ -282,11 +287,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
     highest_rewards = []
     for rollout_id in tqdm(range(num_rollouts)):
         rollout_id += 0
+
+        initial_time = time.time()
+
         ### set task
         if 'sim_transfer_cube' in task_name:
             BOX_POSE[0] = sample_box_pose() # used in sim reset
         elif 'sim_insertion' in task_name:
             BOX_POSE[0] = np.concatenate(sample_insertion_pose()) # used in sim reset
+        elif 'sim_transfer_tea_bag' in task_name:
+            BOX_POSE[0] = sample_teabag_pose()
 
         ts = env.reset()
 
@@ -301,6 +311,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
         ### onscreen render
         if onscreen_render:
+            print("Rendering")
             ax = plt.subplot()
             plt_img = ax.imshow(env._physics.render(height=480, width=640, camera_id=onscreen_cam))
             plt.ion()
@@ -336,16 +347,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 ### process previous timestep to get qpos and image_list
                 obs = ts.observation
 
-                '''if 'images' in obs:
+                if 'images' in obs:
                     image_list.append(obs['images'])
                 else:
-                    image_list.append({'main': obs['image']})'''
+                    image_list.append({'main': obs['image']})
                 
                 qpos_numpy = np.array(obs['qpos'])
-                #qpos = pre_process(qpos_numpy)
-                qpos = pre_process(obs['qpos'])
+                qpos = pre_process(qpos_numpy)
+                # qpos = pre_process(obs['qpos'])
                 qpos = torch.from_numpy(qpos).float().unsqueeze(0)
-                # qpos_history[:, t] = qpos
+                qpos_history[:, t] = qpos
 
                 curr_image = get_image(ts, camera_names)
 
@@ -355,16 +366,18 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if not use_multi_thread:
+                        initial_time = time.time()
                         qpos = qpos.cuda()
                         curr_image = curr_image.cuda()
                         policy_time1 = time.time()
 
                         if t % query_frequency == 0:
                             checkpoint_t = t
+
                             all_actions = policy(qpos, curr_image)
 
                             if interpolation_speed is not None:
-                                all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries)
+                                all_actions = interpolate_by_step(all_actions, interpolation_speed, max_length=num_queries, step0_pos=qpos)
 
                         policy_time2 = time.time()
 
@@ -389,8 +402,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
                         if t % query_frequency == 0:
                             checkpoint_t = t
-                            input_queue.put({'qpos': qpos, 'obs': curr_image, 't': t})
-                            print('Put qpos for t:', t)
+                            input_queue.put({'qpos': qpos.cpu(), 'obs': curr_image.cpu(), 't': t})
+                            #print('Put qpos for t:', t)
                         '''if input_queue.qsize() < 1:
                             input_queue.put({'qpos': qpos, 'obs': curr_image, 't': t})'''
 
@@ -458,26 +471,27 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 mid_time = time.time()
 
                 ### step the environment
-                if (t + 1) % query_frequency != 0:
-                    ts = env.step(
-                        target_qpos, 
-                        no_sleep= t % query_frequency == 0, 
-                        sleep_time= (
-                            max(0, 0.0195-(mid_time - start_time)) 
+                if real_robot:
+                    if (t + 1) % query_frequency != 0:
+                        ts = env.step(
+                            target_qpos,
+                            no_sleep= t % query_frequency == 0,
+                            sleep_time= (
+                                max(0, 0.0195-(mid_time - start_time))
+                            )
                         )
-                    )
+                    else:
+                        ts = env.step(
+                            target_qpos,
+                            no_sleep= t % query_frequency == 0,
+                            sleep_time= (
+                                min(0.0195, max(0.005, 0.0195 - delta_time - (mid_time - start_time)))
+                            )
+                        )
+                        if delta_time > 0:
+                            delta_time = 0
                 else:
-                    ts = env.step(
-                        target_qpos, 
-                        no_sleep= t % query_frequency == 0, 
-                        sleep_time= (
-                            min(0.0195, max(0.005, 0.0195 - delta_time - (mid_time - start_time))) 
-                        )
-                    )
-                    if delta_time > 0:
-                        delta_time = 0
-
-                #ts = env.step(target_qpos, no_sleep= True)
+                    ts = env.step(target_qpos)
 
             
                 ### timing
@@ -489,7 +503,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 policy_inference_time = (policy_time2 - policy_time1) * 1000
                 policy_arrange_time = (policy_time3 - policy_time2) * 1000
 
-                print(f"Time elapsed: {time_elapsed:.4f} ms || timer1: {timer1:.4f} ms || policy inf: {policy_inference_time:.4f} ms || policy arrange time: {policy_arrange_time:.4f} ms")
+                # print(f"Time elapsed: {time_elapsed:.4f} ms || timer1: {timer1:.4f} ms || policy inf: {policy_inference_time:.4f} ms || policy arrange time: {policy_arrange_time:.4f} ms")
 
                 delta_time += (end_time - start_time) - 0.02
 

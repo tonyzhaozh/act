@@ -22,6 +22,7 @@ class ReplayBuffer:
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.max_size, self.batch_size = size, batch_size
         self.ptr, self.size, = 0, 0
+        self.obs_dim = obs_dim
         
         # for N-step Learning
         self.n_step_buffer = deque(maxlen=n_step)
@@ -101,6 +102,41 @@ class ReplayBuffer:
 
     def __len__(self) -> int:
         return self.size
+
+    def save(self, file_name = None):
+        if file_name is None:
+            file_name = self.file_name
+        np.savez(file_name,
+                 obs_buf=self.obs_buf,
+                 next_obs_buf=self.next_obs_buf,
+                 acts_buf=self.acts_buf,
+                 rews_buf=self.rews_buf,
+                 done_buf=self.done_buf,
+                 pointer=self.ptr,
+                 size=self.size,
+                 obs_dim=self.obs_dim,
+                 max_size=self.max_size)
+        print(f"[{file_name}] Successfully saved {self.size} entries of buffers")
+
+    def load(self, file_name = None):
+        if file_name is None:
+            file_name = self.file_name
+        data = np.load(file_name)
+        obs_buf = data['obs_buf']
+        next_obs_buf = data['next_obs_buf']
+        acts_buf = data['acts_buf']
+        rews_buf = data['rews_buf']
+        done_buf = data['done_buf']
+        size, ptr= data['size'], data['pointer']
+        obs_dim , max_size = data['obs_dim'], data['max_size']
+        assert max_size == self.max_size
+        assert obs_dim == self.obs_dim
+
+        cur_ptr = ptr if size >= self.max_size else 0
+        for i in range(size):
+            self.store(obs_buf[cur_ptr], acts_buf[cur_ptr], rews_buf[cur_ptr], next_obs_buf[cur_ptr], done_buf[cur_ptr])
+            cur_ptr = (cur_ptr + 1) % self.max_size
+        print(f"[{file_name}] Successfully loaded {size} entries of buffers")
     
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -123,6 +159,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         alpha: float = 0.6,
         n_step: int = 1, 
         gamma: float = 0.99,
+        file_name: str = None
     ):
         """Initialization."""
         assert alpha >= 0
@@ -140,7 +177,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self.sum_tree = SumSegmentTree(tree_capacity)
         self.min_tree = MinSegmentTree(tree_capacity)
-        
+
+        self.file_name = file_name
+        if self.file_name is not None:
+            self.load(file_name)
+
     def store(
         self, 
         obs: np.ndarray, 
@@ -223,3 +264,4 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weight = weight / max_weight
         
         return weight
+

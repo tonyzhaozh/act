@@ -33,7 +33,7 @@ SIM_TASK_CONFIGS = {
 
     'sim_transfer_tea_bag_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_tea_bag_scripted',
-        'num_episodes': 50,
+        'num_episodes': 500,
         'episode_len': 500,
         'camera_names': ['top']
     },

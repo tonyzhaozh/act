@@ -47,7 +47,7 @@ def make_sim_env(task_name):
         task = InsertionTask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
-    if 'sim_transfer_tea_bag' in task_name:
+    elif 'sim_transfer_tea_bag' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_transfer_tea_bag.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = TransferTeaBagTask(random=False)
@@ -238,7 +238,8 @@ class InsertionTask(BimanualViperXTask):
 class TransferTeaBagTask(BimanualViperXTask):
     def __init__(self, random=None):
         super().__init__(random=random)
-        self.max_reward = 3
+        self.max_reward = 100
+        self.history_reward = 0
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -248,9 +249,16 @@ class TransferTeaBagTask(BimanualViperXTask):
             physics.named.data.qpos[:16] = START_ARM_POSE
             np.copyto(physics.data.ctrl, START_ARM_POSE)
             assert BOX_POSE[0] is not None
-            physics.named.data.qpos[16:] = BOX_POSE[0]
+            box_start_idx = physics.model.name2id('red_box_joint', 'joint')
+            if len(BOX_POSE[0]) == 7:
+                np.copyto(physics.data.qpos[box_start_idx: box_start_idx + 7], BOX_POSE[0])
+            elif len(BOX_POSE[0]) == 39:
+                np.copyto(physics.data.qpos[16:], BOX_POSE[0])
+            else:
+                raise ValueError("Invalid BOX_POSE length")
             # print(f"{BOX_POSE=}")
         super().initialize_episode(physics)
+        self.history_reward = 0
 
     @staticmethod
     def get_env_state(physics):
@@ -272,16 +280,20 @@ class TransferTeaBagTask(BimanualViperXTask):
         touch_table = ("tea_bag", "table") in all_contact_pairs or ("red_box", "table") in all_contact_pairs
         touch_cup_base = ("cup_base", "tea_bag") in all_contact_pairs
 
-
         reward = 0
         if touch_right_gripper:
-            reward = 1
-        if touch_right_gripper and not touch_table: # lifted
-            reward = 2
+            reward = 0
+        if touch_right_gripper and not touch_table:  # lifted
+            reward = 0
         if touch_cup_base:
-            reward = 3
-        return reward
+            reward = 100
 
+        if reward > self.history_reward:
+            self.history_reward = reward
+        else:
+            reward = 0
+
+        return reward
 
 def get_action(master_bot_left, master_bot_right):
     action = np.zeros(14)
