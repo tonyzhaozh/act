@@ -37,6 +37,9 @@ class ReplayBuffer:
         next_obs: np.ndarray, 
         done: bool,
     ) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+
+        #print(obs)
+
         transition = (obs, act, rew, next_obs, done)
         self.n_step_buffer.append(transition)
 

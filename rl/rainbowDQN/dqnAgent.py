@@ -69,7 +69,7 @@ class DQNAgent:
         min_epsilon = 0.6,
         hard_exploration_steps = 0,
         #exploration_steps = 1000,
-        exploration_steps = 1000,
+        exploration_steps = 0,
 
         # PER parameters
         alpha: float = 0.2,
@@ -218,7 +218,7 @@ class DQNAgent:
         t0 = time()
         reward = 0
         for _ in range(frame_skip):
-            next_state, sub_reward, done, info = self.env.step(action)
+            next_state, next_obs, sub_reward, done, info = self.env.step(action)
             reward += sub_reward
             if done:
                 break
@@ -229,7 +229,7 @@ class DQNAgent:
         t0 = time()
         if not self.is_test:
             self.transition += [reward, next_state, done]
-            
+
             # N-step transition
             if self.use_n_step:
                 one_step_transition = self.memory_n.store(*self.transition)
@@ -243,7 +243,7 @@ class DQNAgent:
         add_to_buffer_time = time() - t0
         info = {'success': success, 'finish': info['finish'], 'env_step_time': env_step_time, 'add_to_buffer_time': add_to_buffer_time}
     
-        return next_state, reward, done, info
+        return next_state, next_obs, reward, done, info
 
     def update_model(self) -> torch.Tensor:
         """Update the model by gradient descent."""
@@ -304,7 +304,7 @@ class DQNAgent:
         """Train the agent."""
         self.is_test = False
         
-        state = self.env.reset()
+        state, obs = self.env.reset()
         update_cnt = 0
         episode_cnt = 0
         episode_return = 0
@@ -323,7 +323,7 @@ class DQNAgent:
             action = self.select_action(state)
             inference_time.append(time() - t0)
 
-            next_state, reward, done, info = self.step(action, self.frame_skip)
+            next_state, next_obs, reward, done, info = self.step(action, self.frame_skip)
             #print(next_state, reward, done, info, self.frame_skip)
 
             env_step_time.append(info['env_step_time'])
@@ -380,9 +380,10 @@ class DQNAgent:
 
                 t0 = time()
                 # update_num = min(200, len(self.memory) // self.batch_size // 2) # TODO Tune
-                update_cnt_factor = min(5, int(math.sqrt(num_frames / frame_idx)))
-                update_size_limit = int(len(self.memory) / self.batch_size) + 1
-                update_num = min(int(episode_length * update_cnt_factor), update_size_limit)
+                # update_cnt_factor = min(5, int(math.sqrt(num_frames / frame_idx)))
+                # update_size_limit = int(len(self.memory) / self.batch_size) + 1
+                # update_num = min(int(episode_length * update_cnt_factor), update_size_limit)
+                update_num = episode_length
 
                 total_loss = 0
                 for _ in range(update_num):
@@ -430,7 +431,7 @@ class DQNAgent:
                 add_to_buffer_time = []
                 training_time = []
                 inference_time = []
-                state = self.env.reset()
+                state, obs = self.env.reset()
 
         self.env.close()
         return 1
@@ -457,7 +458,7 @@ class DQNAgent:
 
                 action = self.select_action(state)
                 print(action)
-                next_state, reward, done, info = self.step(action, self.frame_skip)
+                next_state, next_obs, reward, done, info = self.step(action, self.frame_skip)
 
                 state = next_state
                 score += reward

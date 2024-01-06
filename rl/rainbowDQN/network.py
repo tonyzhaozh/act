@@ -119,7 +119,8 @@ class Network(nn.Module):
         atom_size: int, 
         support: torch.Tensor,
         hidden_dim: int = 256,
-        use_state = True
+        use_state = True,
+        use_obs = False
     ):
         """Initialization."""
         super(Network, self).__init__()
@@ -130,18 +131,25 @@ class Network(nn.Module):
         self.hidden_dim = hidden_dim
         self.atom_size = atom_size
         self.use_state = use_state
+        self.use_obs = use_obs
 
-        # set common feature layer
+        assert use_state or use_obs
+
         if self.use_state:
-            self.feature_layer = nn.Sequential(
+            self.state_layer = nn.Sequential(
                 nn.Linear(in_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU()
             )
-        else:
-            raise NotImplementedError
+
+        if self.use_obs:
+            self.image_layer = ImageBackbone(hidden_dim)
+
+        feature_in_dim = 2 * hidden_dim if use_obs and use_state else hidden_dim
+        self.feature_layer = nn.Sequential(
+            nn.Linear(feature_in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
 
         # set advantage layer
         self.advantage_hidden_layer = NoisyLinear(hidden_dim, hidden_dim)
@@ -155,9 +163,9 @@ class Network(nn.Module):
         self.states_mean = torch.nn.Parameter(torch.zeros(in_dim), requires_grad=False)
         self.states_std = torch.nn.Parameter(torch.ones(in_dim), requires_grad=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, image = None) -> torch.Tensor:
         """Forward method implementation."""
-        dist = self.dist(x)
+        dist = self.dist(x, image = image)
         q = torch.sum(dist * self.support, dim=2)
         return q
 
@@ -165,18 +173,23 @@ class Network(nn.Module):
         self.states_mean.copy_(torch.from_numpy(norm_stats['states_mean']))
         self.states_std.copy_(torch.from_numpy(norm_stats['states_std'] + EPS))
 
-    def dist(self, x: torch.Tensor) -> torch.Tensor:
+    def dist(self, x: torch.Tensor, image = None) -> torch.Tensor:
         """Get distribution for atoms."""
         #print(f"x_org = {x}")
         #print(f"{self.states_std=}. {self.states_mean=}")
         x = (x - self.states_mean) / self.states_std  # normalization
         #print(f"{x=}")
 
+        assert self.use_state
         if self.use_state:
-            feature = self.feature_layer(x)
-            #print(f"{feature=}")
-        else:
-            raise NotImplementedError
+            feature = self.state_layer(x)
+
+        if self.use_obs:  # not used
+            assert image is not None
+            image_feature = self.image_layer(image)
+            feature = torch.concatenate((feature, image_feature), dim=-1)
+
+        feature = self.feature_layer(feature)
 
         adv_hid = F.relu(self.advantage_hidden_layer(feature))
         val_hid = F.relu(self.value_hidden_layer(feature))

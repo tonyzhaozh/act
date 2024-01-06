@@ -24,7 +24,8 @@ e = IPython.embed
 class SpeedPolicyEnv:
 
     def __init__(self, env, policy, reward_fn, episode_len, is_sim,
-                 save_video=False, onscreen_render=True, use_state=True, use_env_state=True, parallel_env = None, parallel_policy = None,
+                 save_video=False, onscreen_render=True, use_state=True, use_env_state=True, use_obs = False,
+                 parallel_env = None, parallel_policy = None,
                  speed_param=(1.0, 0.5, 5), env_pre_reset_script = None, env_finish_script = None, multitask = False
         ):
         self.env = env
@@ -52,6 +53,7 @@ class SpeedPolicyEnv:
 
         self.use_state = use_state
         self.use_env_state = use_env_state
+        self.use_obs = use_obs
         if use_state:
             if self.use_env_state:
                 self.obs_space = 39 + 14 + 14
@@ -182,7 +184,8 @@ class SpeedPolicyEnv:
             self.cur_ts = self.env.step(action)
         except Exception as e:
             print("Warning: bad physics", e)
-            return self.timestep_cnt, 0.0, True, {'success': False, 'finish': False}
+            state, observation = self.get_obs()
+            return state, observation, 0.0, True, {'success': False, 'finish': False}
 
         self.episode.append(self.cur_ts)
 
@@ -194,7 +197,7 @@ class SpeedPolicyEnv:
         if self.save_video:
             self.image_list.append(self.cur_ts.observation['images']['angle'])
 
-        observation = self.get_obs()
+        state, observation = self.get_obs()
         # print(observation.shape)
 
         done = self.timestep_cnt >= self.episode_len
@@ -223,7 +226,7 @@ class SpeedPolicyEnv:
         #     else:
         #         ret_reward -= state_parallal_difference
 
-        #print("Step:", self.timestep_cnt, " Speed:", speed, " Reward:", reward)
+        # print("Step:", self.timestep_cnt, " Speed:", speed, " Reward:", reward)
 
         if done:
             if self.multitask:
@@ -269,14 +272,16 @@ class SpeedPolicyEnv:
 
 
         #return observation, reward, done, {}  # for policies conditioned on images
-        return observation, ret_reward, done, {'success': self.cur_success, 'finish': force_finish}  # for policies conditioned on images
+        return state, observation, ret_reward, done, {'success': self.cur_success, 'finish': force_finish}  # for policies conditioned on images
         #return number_to_one_hot(min(500, int(self.timestep_cnt))), reward, done, {}  # for policies conditioned on time
 
     def get_obs(self):
         parallel = self.use_parallel_env
         use_state = self.use_state
         use_env = self.use_env_state
+        use_obs = self.use_obs
         assert not (parallel and use_state)
+        assert not parallel
 
         if use_state:
             if use_env:
@@ -294,18 +299,20 @@ class SpeedPolicyEnv:
 
             if self.multitask:
                 out = np.concatenate([out, np.eye(self.task_num)[self.task_index]], dtype=float)
-
-            return out
-
-        if not parallel:
-            image = self.cur_ts.observation['images']['angle']
         else:
-            assert self.use_parallel_env
-            image = self.parallel_cur_ts.observation['images']['angle']
+            raise NotImplementedError
 
-        resized_image = zoom(image, (.2, .2, 1)).flatten()
-        out = np.concatenate([resized_image, np.array(self.cur_ts.observation["qvel"], dtype=float)])
-        return out
+        # if not parallel:
+        #     image = self.cur_ts.observation['images']['angle']
+        # else:
+        #     assert self.use_parallel_env
+        #     image = self.parallel_cur_ts.observation['images']['angle']
+
+        image = None
+        if use_obs:
+            image = self.cur_ts.observation['images']['angle']
+            image = image / 255.0 - 0.5
+        return out, image
 
     def get_parallel_difference(self):
         img1 = self.cur_ts.observation['images']['angle']
@@ -407,7 +414,7 @@ def test_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=None,
 
     num_rollouts = 3
     for rollout in range(num_rollouts):
-        obs = speed_env.reset()
+        state, obs = speed_env.reset()
         done = False
         rewards = []
         while not done:
@@ -460,7 +467,7 @@ def test_act_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=N
     if speed_func_generator is not None:
         speed_func = speed_func_generator(episode_len)
 
-    obs = speed_env.reset()
+    state, obs = speed_env.reset()
     done = False
     rewards = []
     while not done:
@@ -470,7 +477,7 @@ def test_act_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=N
         else:
             speed = speed_func(obs=obs, t=speed_env.timestep_cnt)
 
-        obs, reward, done, _ = speed_env.step(speed, quantized=False)
+        state, obs, reward, done, _ = speed_env.step(speed, quantized=False)
         rewards.append(reward)
 
     max_reward = np.max(rewards)

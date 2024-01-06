@@ -23,7 +23,7 @@ def run(mode='scripted', args=None, is_eval = False):
 
     # training
     num_frames = 2000000
-    batch_size = 64
+    batch_size = 256
 
     # RL params
     frame_skip = 10
@@ -31,7 +31,7 @@ def run(mode='scripted', args=None, is_eval = False):
     memory_size = 2000000
     target_update = 50
     num_frames = num_frames // frame_skip
-    hidden_dim = 384
+    hidden_dim = 1024
     lr = args['lr']
 
     # env params
@@ -59,11 +59,11 @@ def run(mode='scripted', args=None, is_eval = False):
     #     return reward
 
     # pow 2
-    reward_name = "Pow2"
-    def reward_fn(speed, done, success):
-        reward = 100 if done and success else 0
-        reward += (speed ** 2.0) / 100
-        return reward
+    # reward_name = "Pow2"
+    # def reward_fn(speed, done, success):
+    #     reward = 100 if done and success else 0
+    #     reward += (speed ** 2.0) / 100
+    #     return reward
 
     # pow 2 higher weight
     # reward_name = "Pow2High"
@@ -71,6 +71,13 @@ def run(mode='scripted', args=None, is_eval = False):
     #     reward = 80 if done and success else 0
     #     reward += (speed ** 2.0) / 50
     #     return reward
+
+    # pow 2 lower weight
+    reward_name = "Pow2Low"
+    def reward_fn(speed, done, success):
+        reward = 80 if done and success else 0
+        reward += (speed ** 2.0) / 120
+        return reward
 
     is_sim = True
     if args and args['task_name'][:4] != 'sim_' and args['task_name'] != 'multitask':
@@ -82,7 +89,7 @@ def run(mode='scripted', args=None, is_eval = False):
     # others
     disable_render = not is_eval and not args["onscreen_render"]
     disable_random = False
-    disable_env_state = True
+    disable_env_state = False
     load_model = True and not args["new"]
     num_tests = 1
 
@@ -95,6 +102,9 @@ def run(mode='scripted', args=None, is_eval = False):
         name += f"_vmax{high_speed}-{speed_param[2]}"
     if disable_env_state:
         name += "_no_envs"
+    if hidden_dim != 256:
+        name += f"_dim{hidden_dim}"
+
     if args is not None:
         name = args["task_name"] + '_' + name
         is_sim = args["task_name"][:4] == "sim_"
