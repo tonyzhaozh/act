@@ -12,6 +12,7 @@ from utils import sample_box_pose, sample_insertion_pose
 from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
+from sim_env import BOX_POSE
 
 import IPython
 e = IPython.embed
@@ -323,16 +324,15 @@ class TransferTeaBagEETask(BimanualViperXEETask):
         # test_pose = np.array([0.2361552 , 0.42309808, 0.05, 1, 0, 0, 0])
 
         if not DISABLE_RANDOM[0]:
-            random_scale = 0.05
-            noise = np.concatenate((np.random.uniform(low = -random_scale, high = random_scale, size=(2,)), np.array([0, 0, 0, 0, 0])))
-            cube_pose += noise
+            assert BOX_POSE[0] is not None
+            cube_pose = BOX_POSE[0]
 
         if test_pose is not None:
             cube_pose = test_pose
 
         box_start_idx = physics.model.name2id('red_box_joint', 'joint')
         np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
-        #print(f"randomized cube position to {cube_pose} starting in {box_start_idx}")
+        print(f"randomized cube position to {cube_pose}")
 
         self.history_reward = 0
 

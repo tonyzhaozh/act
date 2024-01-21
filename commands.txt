@@ -1630,6 +1630,399 @@ python3 run_speed_rl.py \
 --task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5
 
 
+# launch again without env state
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --seed 10
+
+# launch again with env state
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --seed 10
+
+# tuning sessions
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-4 --seed 10 \
+--name try_1e-4lr_512hidden
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-4 --seed 10 \
+--name try2_1e-4lr_512hidden_fs20
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 10 \
+--name try3_3e-4lr_512hidden_fs20
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 10 \
+--name try4_noPER
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 10 \
+--name try5_noNstep
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try6_40Terminal
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try7_vanilla_again
+
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try8_nStep5
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try9_nStep7
+
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try11_halfUpdate
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try12_fs5
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try13_fs2
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try14_10bins
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try15_5bins1slot
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try16_vanilla_no_random
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try17_vanilla
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try18_7bins
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try19_7bins_fs15
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try20_7bins_fs30
+
+
+
+# baselines
+
+launcha
+export MUJOCO_GL=egl
+python3 constant_baseline.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --seed 10
+
+
+# reduce randomization
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try21_7bins_rand0.01
+
+
+# Fixed the cube position randomization: for all above experiments the cube is always 0.05 except when the flag is used
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try22_5bins_rand0
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try22_7bins_rand0
+
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try22_7bins_rand0.02
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try23_7bins_rand0.01
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try24_9bins_rand0.01
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try24_5bins_rand0.01
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try25_7bins_rand0.01_div200reward
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 10 \
+--name try26_5bins_rand0.01
+
+
+
+# 0.001
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try27_5bins_rand0.005
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try28_7bins_rand0.005
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 9 \
+--name try29_9bins_rand0.005
+
+
+
+# 0.005 3 seeds
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 0 \
+--name try30_5bins_rand0.005
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 1 \
+--name try31_5bins_rand0.005
+
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 2 \
+--name try32_5bins_rand0.005
+
+
+
+
+# 0.005 baselines
+
+launcha
+export MUJOCO_GL=egl
+python3 constant_baseline.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --seed 10
+
+
+
+launcha
+export MUJOCO_GL=egl
+python3 constant_baseline.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 1e-5 --seed 10 --learned-policy
+
+
+
+### learned policy
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 0 \
+--name try34_learned_5bins_rand0.005 --learned-policy
 
 
 

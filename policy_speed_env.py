@@ -522,6 +522,10 @@ def create_speed_env(
             episode_len = [get_task_config(task_name + '_scripted')['episode_len'] for task_name in task_names]
         else:
             raise NotImplementedError
+        
+        def resample_box_pos():
+            BOX_POSE[0] = sample_teabag_pose()
+        env_pre_reset_script = resample_box_pos
 
     elif mode == 'learned' and 'sim_transfer_tea_bag' in task_name:
         assert args is not None

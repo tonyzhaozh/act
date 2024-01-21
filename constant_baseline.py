@@ -1,5 +1,5 @@
 import time
-
+import numpy as np
 from policy_speed_env import create_speed_env
 #from rl.agents.DQN import DQNAgent
 from rl.rainbowDQN.dqnAgent import DQNAgent
@@ -18,60 +18,30 @@ def main(args):
 
 def run(mode='scripted', args=None, is_eval = False):
     ######################################################
+
+    CONSTANT_SPEED_SLOT_LIST = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    num_evals = 50
     
     seed = args['seed']
-    name = args['name']
 
     # training
-    num_frames = 4000000
+    num_frames = 2000000
     batch_size = 256
 
     # RL params
     frame_skip = 10
     gamma = 0.99
     memory_size = 2000000
-    target_update = 50
+    target_update = 50  # TODO tony
     num_frames = num_frames // frame_skip
-    hidden_dim = 1024
+    hidden_dim = 1024  # TODO tony
     lr = args['lr']
 
     # env params
-    speed_param = (0.5, 0.5, 5)  # min_speed, speed_slot_val, slot_num
+    speed_param = (0.5, 0.25, 10)  # min_speed, speed_slot_val, slot_num
     high_speed = speed_param[0] + speed_param[1] * (speed_param[2] - 1)
 
-    # no speed
-    # reward_name = "NoSpeed"
-    # def reward_fn(speed, done, success):
-    #     reward = 100 if done and success else 0
-    #     return reward
-
-    # pow 1
-    # reward_name = "Pow1"
-    # def reward_fn(speed, done, success):
-    #     reward = 100 if done and success else 0
-    #     reward += (speed ** 1.0) / 100
-    #     return reward
-
-    # pow 1 high
-    # reward_name = "Pow1High"
-    # def reward_fn(speed, done, success):
-    #     reward = 100 if done and success else 0
-    #     reward += (speed ** 1.0) / 50
-    #     return reward
-
-    # pow 2
-    # reward_name = "Pow2"
-    # def reward_fn(speed, done, success):
-    #     reward = 100 if done and success else 0
-    #     reward += (speed ** 2.0) / 100
-    #     return reward
-
-    # pow 2 higher weight
-    # reward_name = "Pow2High"
-    # def reward_fn(speed, done, success):
-    #     reward = 80 if done and success else 0
-    #     reward += (speed ** 2.0) / 50
-    #     return reward
+    CONSTANT_SPEED_LIST = [speed_param[0] + speed_param[1] * ii for ii in CONSTANT_SPEED_SLOT_LIST]
 
     # pow 2 lower weight
     reward_name = "Pow2Low"
@@ -95,7 +65,7 @@ def run(mode='scripted', args=None, is_eval = False):
     num_tests = 1
 
     # name
-    name += f"_{mode}Policy_SpeedReward{reward_name}_fs{frame_skip}"
+    name = f"{mode}Policy_SpeedReward{reward_name}_fs{frame_skip}"
     if not disable_random:
         print("Using random")
         name += "_Rand005"
@@ -112,7 +82,6 @@ def run(mode='scripted', args=None, is_eval = False):
     name += f"_seed{seed}"
 
     model_path = f"/scr2/tonyzhao/dynamic_train_logs/{name}"
-    print(f'{model_path=}')
 
     ######################################################
 
@@ -135,48 +104,34 @@ def run(mode='scripted', args=None, is_eval = False):
         )
     else:
         raise NotImplementedError('Unrecognized mode')
-    # train
-    agent = DQNAgent(env,
-                     memory_size,
-                     batch_size,
-                     target_update,
-                     seed,
-                     is_test = is_eval,
-                     lr = lr,
-                     hidden_dim = hidden_dim,
-                     frame_skip=frame_skip,
-                     gamma=gamma,
-                     name=name,
-                     ckpt_save_freq=ckpt_save_freq,
-                     log_dir="logs",
-                     model_path = model_path,
-                     is_sim = is_sim,
-                     exploration_steps=1000 if not load_model and not is_eval else 0
-                     )
+    
+    speed_success_list = []
+    for constant_speed in CONSTANT_SPEED_SLOT_LIST:
+        print(f'{constant_speed=}')
+        success_list = []
+        for i in range(num_evals):
+            state, obs = env.reset()
+            episode_return = 0
+            episode_action = []
+            done = False
+            while not done:
+                action = constant_speed
+                next_state, next_obs, reward, done, info = env.step(action, frame_skip)
+                #print(next_state, reward, done, info, self.frame_skip)
 
-    if not is_eval:
-        print(f'\n\n===============Starting training: {name}===============\n\n')
-        time.sleep(0.3)
-        if load_model:
-            print("Loading model from: ", model_path)
-            try:
-                agent.load(model_path)
-            except Exception as e:
-                print("Error loading model, starting from scratch")
-        print("Training model...")
-        ret = agent.train(num_frames)
-        if ret == 1:
-            agent.save(model_path)
+                success = info['success']
+                force_finish = info['finish']
 
-    # test
-    else:
-        print(f'\n\n===============Starting testing: {name}===============\n\n')
-        time.sleep(0.3)
-        print("Loading model from: ", model_path)
-        agent.load(model_path)
+                state = next_state
+                episode_return += reward
+                episode_action.append(action)
+            success_list.append(success)
+        speed_success_list.append(np.mean(success_list))
 
-        print("Testing model...")
-        agent.test(num_tests)
+    print('\n\n\n')
+    print(f'{CONSTANT_SPEED_SLOT_LIST=}')
+    print(f'{CONSTANT_SPEED_LIST=}')
+    print(f'{speed_success_list=}')
 
 
 if __name__ == '__main__':
@@ -189,7 +144,6 @@ if __name__ == '__main__':
     parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
     parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
     parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
-    parser.add_argument('--name', action='store', type=str, help='name', required=True)
 
     # eval
     parser.add_argument('--eval', action='store_true')

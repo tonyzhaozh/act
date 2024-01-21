@@ -72,6 +72,7 @@ def get_args_parser():
 
     # for multi-threading (not used)
     parser.add_argument('--multi_thread', action='store_true', default=False, required=False)
+    parser.add_argument('--name', action='store', type=str, help='task_name', required=False)
 
 
 
