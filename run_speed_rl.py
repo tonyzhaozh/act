@@ -36,8 +36,15 @@ def run(mode='scripted', args=None, is_eval = False):
     lr = args['lr']
 
     # env params
-    speed_param = (0.5, 0.5, 5)  # min_speed, speed_slot_val, slot_num
-    high_speed = speed_param[0] + speed_param[1] * (speed_param[2] - 1)
+    use_detailed_speed_profile = False
+    if not use_detailed_speed_profile:
+        speed_param = (0.5, 0.5, 5)  # min_speed, speed_slot_val, slot_num
+        high_speed = speed_param[0] + speed_param[1] * (speed_param[2] - 1)
+        speed_slots = None
+    else:
+        speed_param = (None, None, 4)
+        speed_slots = [1.0, 1.5, 2.0, 4.0]
+        high_speed = speed_slots[-1]
 
     # no speed
     # reward_name = "NoSpeed"
@@ -124,14 +131,16 @@ def run(mode='scripted', args=None, is_eval = False):
     if mode == 'scripted':
         env = create_speed_env( mode, None, task_name=args['task_name'],
             reward_fn=reward_fn, use_parallel=False,
-            speed_param = speed_param, use_env_state= not disable_env_state,
-            onscreen_render= is_eval or args["onscreen_render"]
+            use_env_state= not disable_env_state,
+            onscreen_render= is_eval or args["onscreen_render"],
+            speed_param=speed_param, speed_slots=speed_slots,
         )
     elif mode == 'learned':
         env = create_speed_env( mode, args, task_name=args['task_name'],
             reward_fn=reward_fn, use_parallel=False,
-            speed_param = speed_param, use_env_state= not disable_env_state,
-            onscreen_render = is_eval, save_video=is_eval
+            use_env_state= not disable_env_state,
+            onscreen_render = is_eval, save_video=is_eval,
+            speed_param = speed_param, speed_slots = speed_slots,
         )
     else:
         raise NotImplementedError('Unrecognized mode')

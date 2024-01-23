@@ -26,7 +26,8 @@ class SpeedPolicyEnv:
     def __init__(self, env, policy, reward_fn, episode_len, is_sim,
                  save_video=False, onscreen_render=True, use_state=True, use_env_state=True, use_obs = False,
                  parallel_env = None, parallel_policy = None,
-                 speed_param=(1.0, 0.5, 5), env_pre_reset_script = None, env_finish_script = None, multitask = False
+                  env_pre_reset_script = None, env_finish_script = None, multitask = False,
+                 speed_param=(1.0, 0.5, 5), speed_slots=None
         ):
         self.env = env
         self.is_sim = is_sim
@@ -49,6 +50,13 @@ class SpeedPolicyEnv:
 
 
         self.min_speed, self.speed_slot_val, self.speed_slot_num = speed_param
+        if speed_slots is not None:
+            assert self.min_speed is None and self.speed_slot_val is None
+            assert len(speed_slots) == self.speed_slot_num
+            self.speed_slots = speed_slots
+        else:
+            self.speed_slots = None
+
         self.speed_list = []
 
         self.use_state = use_state
@@ -136,6 +144,8 @@ class SpeedPolicyEnv:
         if not self.is_sim:
             input("Ready to go.")
 
+        self.speed_list = []
+
         return self.get_obs()
         #return number_to_one_hot(0)
 
@@ -146,7 +156,10 @@ class SpeedPolicyEnv:
         if quantized:
             if isinstance(speed, float):
                 raise ValueError("Speed is set to be quantized, invalid value detected")
-            speed = self.min_speed + self.speed_slot_val * min(speed, self.speed_slot_num)
+            if self.speed_slots is None:
+                speed = self.min_speed + self.speed_slot_val * min(speed, self.speed_slot_num)
+            else:
+                speed = self.speed_slots[min(speed, self.speed_slot_num - 1)]
 
         self.timestep_cnt += speed
         self.real_cnt += 1
@@ -489,7 +502,7 @@ def test_act_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=N
 def create_speed_env(
         mode = "scripted", args = None,
         task_name = 'sim_transfer_tea_bag_scripted', reward_fn = None, onscreen_render=False, use_parallel = False, use_env_state = True, save_video=False,
-        speed_param = (1.0, 0.5, 5)
+        speed_param = (1.0, 0.5, 5), speed_slots = None
     ):
     print(f"Creating {mode} speed env for task {task_name} (args = {args})")
 
@@ -522,7 +535,7 @@ def create_speed_env(
             episode_len = [get_task_config(task_name + '_scripted')['episode_len'] for task_name in task_names]
         else:
             raise NotImplementedError
-        
+
         def resample_box_pos():
             BOX_POSE[0] = sample_teabag_pose()
         env_pre_reset_script = resample_box_pos
@@ -563,12 +576,13 @@ def create_speed_env(
 
     if not use_parallel:
         speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, is_sim, onscreen_render=onscreen_render, use_env_state=use_env_state,
-                                   save_video=save_video, speed_param=speed_param,
+                                   save_video=save_video, speed_param=speed_param, speed_slots=speed_slots,
                                    env_pre_reset_script = env_pre_reset_script, env_finish_script = env_finish_script, multitask= task_name == 'multitask')
     else:
-        speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, is_sim, onscreen_render=onscreen_render, use_env_state=use_env_state,
+        '''speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, is_sim, onscreen_render=onscreen_render, use_env_state=use_env_state,
                                    speed_param=speed_param, parallel_env = copy.deepcopy(env), parallel_policy = copy.deepcopy(policy), save_video=save_video,
-                                   env_pre_reset_script=env_pre_reset_script, env_finish_script = env_finish_script)
+                                   env_pre_reset_script=env_pre_reset_script, env_finish_script = env_finish_script)'''
+        raise NotImplementedError
 
     return speed_env
 

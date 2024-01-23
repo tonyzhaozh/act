@@ -2025,6 +2025,25 @@ python3 run_speed_rl.py \
 --name try34_learned_5bins_rand0.005 --learned-policy
 
 
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 0 \
+--name try35_learned_5bins_rand0 --learned-policy
+
+launcha
+export MUJOCO_GL=egl
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 --policy_class ACT --num_epochs 5000 --lr 3e-4 --seed 0 \
+--name try36_learned_5bins_rand0.05 --learned-policy
+
+
+
+
 
 
 
