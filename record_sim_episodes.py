@@ -30,8 +30,6 @@ def main(args):
     inject_noise = False
     render_cam_name = 'angle'
 
-    if not os.path.isdir(dataset_dir):
-        os.makedirs(dataset_dir, exist_ok=True)
 
     episode_len = SIM_TASK_CONFIGS[task_name]['episode_len']
     camera_names = SIM_TASK_CONFIGS[task_name]['camera_names']
@@ -41,6 +39,10 @@ def main(args):
         policy_cls = InsertionPolicy
     else:
         raise NotImplementedError
+
+    dataset_dir = os.path.join(dataset_dir, task_name)
+    if not os.path.isdir(dataset_dir):
+        os.makedirs(dataset_dir, exist_ok=True)
 
     success = []
     for episode_idx in range(num_episodes):
