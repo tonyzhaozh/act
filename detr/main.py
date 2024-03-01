@@ -65,6 +65,7 @@ def get_args_parser():
     parser.add_argument('--temporal_agg', action='store_true')
     parser.add_argument('--learned-policy', action='store_true')
     parser.add_argument('--new', action='store_true')
+    parser.add_argument('--sweep', action='store')
 
     # for interpolation (not used)
     parser.add_argument('--interpolation_speed', action='store', type=float, required=False)

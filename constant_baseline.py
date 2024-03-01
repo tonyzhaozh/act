@@ -81,7 +81,7 @@ def run(mode='scripted', args=None, is_eval = False):
         is_sim = args["task_name"][:4] == "sim_"
     name += f"_seed{seed}"
 
-    model_path = f"/scr2/tonyzhao/dynamic_train_logs/{name}"
+    model_path = f"/scr/tonyzhao/dynamic_train_logs/{name}"
 
     ######################################################
 

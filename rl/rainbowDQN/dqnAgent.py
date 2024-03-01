@@ -68,8 +68,8 @@ class DQNAgent:
         epsilon_decay: float = 0.999,
         min_epsilon = 0.6,
         hard_exploration_steps = 0,
-        #exploration_steps = 1000,
-        exploration_steps = 0,
+        exploration_steps = 1000,
+        #exploration_steps = 0,
 
         # PER parameters
         alpha: float = 0.2,
@@ -110,8 +110,8 @@ class DQNAgent:
             atom_size (int): the unit number of support
             n_step (int): step number to calculate n-step td error
         """
-        obs_dim = env.obs_space
-        action_dim = env.action_space
+        self.obs_dim = env.obs_space
+        self.action_dim = env.action_space
 
         self.env = env
         self.frame_skip = frame_skip
@@ -140,7 +140,7 @@ class DQNAgent:
         self.beta = beta
         self.prior_eps = prior_eps
         self.memory = PrioritizedReplayBuffer(
-            obs_dim, memory_size, batch_size, alpha=alpha, gamma=gamma
+            self.obs_dim, memory_size, batch_size, alpha=alpha, gamma=gamma
         )
         
         # memory for N-step Learning
@@ -149,7 +149,7 @@ class DQNAgent:
         if self.use_n_step:
             self.n_step = n_step
             self.memory_n = ReplayBuffer(
-                obs_dim, memory_size, batch_size, n_step=n_step, gamma=gamma
+                self.obs_dim, memory_size, batch_size, n_step=n_step, gamma=gamma
             )
             
         # Categorical DQN parameters
@@ -162,10 +162,10 @@ class DQNAgent:
 
         # networks: dqn, dqn_target
         self.dqn = Network(
-            obs_dim, action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
+            self.obs_dim, self.action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
         ).to(self.device)
         self.dqn_target = Network(
-            obs_dim, action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
+            self.obs_dim, self.action_dim, self.atom_size, self.support, hidden_dim=hidden_dim
         ).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
@@ -186,12 +186,10 @@ class DQNAgent:
         self.ckpt_save_freq = ckpt_save_freq
         self.model_path = model_path
 
-    def select_action(self, state: np.ndarray) -> np.ndarray:
+    def select_action(self, state: np.ndarray, episode_random_status = None) -> np.ndarray:
         """Select an action from the input state."""
 
-        if np.random.uniform() < self.epsilon and not self.is_test:
-            selected_action = 1
-        else:
+        if episode_random_status is None or self.is_test:
             # NoisyNet: no epsilon greedy action selection
             q_values = self.dqn(
                 torch.FloatTensor(state).unsqueeze(0).to(self.device)
@@ -202,6 +200,9 @@ class DQNAgent:
 
             selected_action = q_values.argmax()
             selected_action = selected_action.detach().cpu().numpy()
+        else:
+            assert isinstance(episode_random_status, int)
+            selected_action = episode_random_status
 
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -209,6 +210,15 @@ class DQNAgent:
         #print("Action:", state, selected_action)
         
         return selected_action
+
+    def sample_episode_random_status(self):
+        is_random = random.random() < self.epsilon
+        if not is_random:
+            res =  None
+        else:
+            res = random.randint(0, self.action_dim - 1)
+        #print(f"sampled episode random status to {res}, epsilon: {self.epsilon}")
+        return res
 
     def step(self, action: np.ndarray, frame_skip: int) -> Tuple[np.ndarray, np.float64, bool, dict]:
         """Take an action and return the response of the env."""
@@ -291,6 +301,7 @@ class DQNAgent:
         return loss.item()
 
     def decay_epsilon(self, idx):
+        #print(f"Decaying epsilon: {idx}, {self.epsilon}, {self.exploration_steps}")
         if idx <= self.hard_exploration_steps:
             self.epsilon = 1.0
             return
@@ -298,6 +309,7 @@ class DQNAgent:
             self.epsilon = 0.0
             return
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.min_epsilon)
+        
 
         
     def train(self, num_frames: int, plotting_interval: int = 1):
@@ -316,11 +328,13 @@ class DQNAgent:
         training_time = []
         inference_time = []
 
+        episode_random_status = self.sample_episode_random_status()
+
         states_history = deque(maxlen=num_frames)
         for frame_idx in range(1, num_frames + 1):
             t0 = time()
 
-            action = self.select_action(state)
+            action = self.select_action(state, episode_random_status)
             inference_time.append(time() - t0)
 
             next_state, next_obs, reward, done, info = self.step(action, self.frame_skip)
@@ -360,7 +374,8 @@ class DQNAgent:
                     self.writer.add_scalar("Metrics/Success Return", episode_return, episode_cnt)
 
                 prev_frame_idx = frame_idx
-                #state, _ = self.env.reset(seed=self.seed)
+                
+                episode_random_status = self.sample_episode_random_status()
 
             # if training is ready
             if len(self.memory) >= self.batch_size and done:
@@ -448,7 +463,7 @@ class DQNAgent:
 
         while done_cnt < num_tests:
             #state, _ = self.env.reset(seed=self.seed)
-            state = self.env.reset()
+            state, obs = self.env.reset()
             done = False
             score = 0
             step = 0

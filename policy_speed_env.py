@@ -1,6 +1,9 @@
 import random
 
 import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from pyquaternion import Quaternion
 
@@ -10,6 +13,9 @@ from utils import number_to_one_hot
 from scipy.ndimage import zoom
 from skimage.metrics import structural_similarity as ssim
 
+from torchvision import models
+from torchvision import transforms
+from PIL import Image
 import cv2, copy
 
 from act_policy_wrapper import InterpolatedACTPolicy
@@ -24,9 +30,12 @@ e = IPython.embed
 class SpeedPolicyEnv:
 
     def __init__(self, env, policy, reward_fn, episode_len, is_sim,
-                 save_video=False, onscreen_render=True, use_state=True, use_env_state=True, use_obs = False,
+                 save_video=False, onscreen_render=True, 
+                 use_state=True, use_env_state=True, 
+                 use_obs = False, image_encoder = None,
+                 frame_stack_state = 1, frame_stack_obs = 1,
                  parallel_env = None, parallel_policy = None,
-                  env_pre_reset_script = None, env_finish_script = None, multitask = False,
+                 env_pre_reset_script = None, env_finish_script = None, multitask = False,
                  speed_param=(1.0, 0.5, 5), speed_slots=None
         ):
         self.env = env
@@ -59,17 +68,37 @@ class SpeedPolicyEnv:
 
         self.speed_list = []
 
+        self.frame_stack_state = frame_stack_state
+        self.frame_stack_obs = frame_stack_obs
+
         self.use_state = use_state
         self.use_env_state = use_env_state
         self.use_obs = use_obs
-        if use_state:
+        self.image_encoder = image_encoder
+
+        self.obs_space = 28 * self.frame_stack_state
+        if use_state: # use env state
             if self.use_env_state:
-                self.obs_space = 39 + 14 + 14
-            else:
-                self.obs_space = 14 + 14
-        else:
-            self.obs_space = 96 * 128 * 3 + 14
+                self.obs_space += 39 * self.frame_stack_state
+            
+        if self.use_obs:
+            self.obs_space += 512 * self.frame_stack_obs 
+            self.obs_encoder = self._get_obs_encoder()
+            
+            image_size = 120
+            self.transform = transforms.Compose([
+                transforms.Resize(image_size),  # will scale the image
+                transforms.CenterCrop(image_size),
+                transforms.ToTensor(),
+                transforms.Lambda(expand_greyscale),
+                transforms.Normalize(
+                    mean=torch.tensor([0.485, 0.456, 0.406]),
+                    std=torch.tensor([0.229, 0.224, 0.225])),
+            ])
+        
         self.action_space = self.speed_slot_num
+        self.state_stack = []
+        self.obs_stack = []
 
         if self.onscreen_render:
             self.ax = None
@@ -117,6 +146,8 @@ class SpeedPolicyEnv:
         self.real_cnt = 0
         self.image_list = []
         self.episode = []
+        self.state_stack = []
+        self.obs_stack = []
         self.cur_success = False
         self.success_keyframe = None
         self.success_keyframe_real = None
@@ -299,19 +330,19 @@ class SpeedPolicyEnv:
         if use_state:
             if use_env:
                 env_state = self.cur_ts.observation['env_state']
-                out = np.concatenate([
+                cur_out = np.concatenate([
                     env_state,
                     self.cur_ts.observation["qpos"],
                     np.array(self.cur_ts.observation["qvel"], dtype=float)
                 ])
             else:
-                out = np.concatenate([
+                cur_out = np.concatenate([
                     self.cur_ts.observation["qpos"],
                     np.array(self.cur_ts.observation["qvel"], dtype=float)
                 ])
 
             if self.multitask:
-                out = np.concatenate([out, np.eye(self.task_num)[self.task_index]], dtype=float)
+                cur_out = np.concatenate([out, np.eye(self.task_num)[self.task_index]], dtype=float)
         else:
             raise NotImplementedError
 
@@ -321,11 +352,39 @@ class SpeedPolicyEnv:
         #     assert self.use_parallel_env
         #     image = self.parallel_cur_ts.observation['images']['angle']
 
-        image = None
+        if len(self.state_stack) < self.frame_stack_state:
+            while len(self.state_stack) < self.frame_stack_state:
+                self.state_stack.append(cur_out.copy())
+        else:
+            self.state_stack = self.state_stack[1:] + [cur_out.copy()]
+
+        assert len(self.state_stack) == self.frame_stack_state
+        out = np.concatenate(self.state_stack, dtype=float)
+
+
+        image_feature = None
         if use_obs:
-            image = self.cur_ts.observation['images']['angle']
-            image = image / 255.0 - 0.5
-        return out, image
+            image = self.cur_ts.observation['images']['top']
+            image = self._process_image(image)
+
+            image = image.unsqueeze(dim=0).cuda()
+            image_feature = self.obs_encoder(image)
+            image_feature = image_feature.reshape((-1,)).cpu().detach().numpy()
+            
+            
+            if len(self.obs_stack) < self.frame_stack_obs:
+                while len(self.obs_stack) < self.frame_stack_obs:
+                    self.obs_stack.append(image_feature.copy())
+            else:
+                self.obs_stack = self.obs_stack[1:] + [image_feature.copy()]
+
+            assert len(self.obs_stack) == self.frame_stack_obs
+            img_out = np.concatenate(self.obs_stack, dtype=float)
+            
+            out = np.concatenate((out, img_out))
+        
+        #return out, image_feature
+        return out, None    # not returning raw image
 
     def get_parallel_difference(self):
         img1 = self.cur_ts.observation['images']['angle']
@@ -389,6 +448,32 @@ class SpeedPolicyEnv:
     def close(self):
         plt.close()
 
+    def _get_obs_encoder(self):
+        assert self.image_encoder is not None
+        if self.image_encoder == "BYOL":
+            model = models.resnet18()
+            ckpt_path = '/scr/tonyzhao/train_logs/byol-sim_transfer_tea_bag_scripted-top-seed-0.pt'
+            loading_status = model.load_state_dict(torch.load(ckpt_path))
+            model = nn.Sequential(*list(model.children())[:-1])
+            print(loading_status)
+        elif self.image_encoder == "resnet_pretrained":
+            model = models.resnet18(pretrained=True)  
+            model = nn.Sequential(*list(model.children())[:-1])
+        elif self.image_encoder == "resnet_random":
+            model = models.resnet18(pretrained=False)  
+            model = nn.Sequential(*list(model.children())[:-1])
+        else:
+            raise NotImplementedError(self.image_encoder)
+        model.cuda()
+        model.eval()
+        return model
+
+    def _process_image(self, image):
+        image = Image.fromarray(image)
+        return self.transform(image)
+
+def expand_greyscale(t):
+    return t.expand(3, -1, -1)
 
 def test_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=None, speed_func_generator=None,
                    save_video = False, onscreen_render=False, use_parallel = False,
@@ -463,7 +548,7 @@ def test_act_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=N
 
     args = {
         'task_name': 'sim_transfer_tea_bag_scripted',
-        'ckpt_dir': '/scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted',
+        'ckpt_dir': '/scr/tonyzhao/train_logs/sim_transfer_tea_bag_scripted',
         'lr': 1e-5,
         'chunk_size': 100,
         'kl_weight': 80,
@@ -501,7 +586,11 @@ def test_act_speed_env(task_name = 'sim_transfer_tea_bag_scripted', speed_func=N
 
 def create_speed_env(
         mode = "scripted", args = None,
-        task_name = 'sim_transfer_tea_bag_scripted', reward_fn = None, onscreen_render=False, use_parallel = False, use_env_state = True, save_video=False,
+        task_name = 'sim_transfer_tea_bag_scripted', reward_fn = None, 
+        use_parallel = False, use_env_state = True, 
+        use_obs = False, image_encoder = None,
+        frame_stack_state = 1, frame_stack_obs = 1,
+        save_video=False, onscreen_render=False, 
         speed_param = (1.0, 0.5, 5), speed_slots = None
     ):
     print(f"Creating {mode} speed env for task {task_name} (args = {args})")
@@ -575,7 +664,9 @@ def create_speed_env(
         raise NotImplementedError
 
     if not use_parallel:
-        speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, is_sim, onscreen_render=onscreen_render, use_env_state=use_env_state,
+        speed_env = SpeedPolicyEnv(env, policy, reward_fn, episode_len, is_sim, onscreen_render=onscreen_render, use_env_state=use_env_state, 
+                                    use_obs=use_obs, image_encoder = image_encoder,
+                                    frame_stack_state = frame_stack_state, frame_stack_obs = frame_stack_obs,
                                    save_video=save_video, speed_param=speed_param, speed_slots=speed_slots,
                                    env_pre_reset_script = env_pre_reset_script, env_finish_script = env_finish_script, multitask= task_name == 'multitask')
     else:

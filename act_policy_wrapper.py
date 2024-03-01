@@ -90,7 +90,8 @@ class InterpolatedACTPolicy:
         if self.is_sim and t >= self.episode_len + self.chunk_size:
             raise ValueError("Trajectory too long")
 
-        if self.populated[int(t)] == 0 or self.populated[int(t) + 1] == 0:
+        cur_t = int(t)
+        if self.populated[cur_t] == 0 or self.populated[cur_t + 1] == 0 or self.populated[cur_t + 2] == 0:
             obs = ts.observation
 
             qpos_numpy = np.array(obs['qpos'])
@@ -101,7 +102,6 @@ class InterpolatedACTPolicy:
             with torch.inference_mode():
                 all_actions = self.policy(qpos, curr_image)
 
-            cur_t = int(t)
             if t - 1 >= 0:
                 cur_action = self.all_time_actions[int(t) - 1, :]
                 starting_actions = all_actions[:3, :]

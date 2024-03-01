@@ -59,7 +59,48 @@ python3 run_speed_rl.py \
 --kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
 --task_name sim_transfer_tea_bag_scripted --seed 0 \
 --policy_class ACT --num_epochs 5000 \
---lr 1e-5 --learned-policy
+--lr 1e-5 --learned-policy --name NonLinearSpeed
+
+python3 run_speed_rl.py \
+--ckpt_dir /scr2/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --name NonLinearSpeed
+
+python3 run_speed_rl.py \
+--ckpt_dir /scr/tonyzhao/train_logs/sim_transfer_tea_bag_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_tea_bag_scripted --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --name ImageObsSweep --learned-policy --new --sweep 5
+
+####################################### speed tuning on other baselines
+
+python3 run_speed_rl.py \
+--ckpt_dir /scr/tonyzhao/train_logs/sim_transfer_cube_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_transfer_cube_scripted --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --name CubeTransfer --learned-policy --new
+
+python3 run_speed_rl.py \
+--ckpt_dir /scr/tonyzhao/train_logs/sim_insertion_scripted \
+--kl_weight 80 --chunk_size 100 --hidden_dim 512 --dim_feedforward 3000 \
+--task_name sim_insertion_scripted --seed 0 \
+--policy_class ACT --num_epochs 5000 \
+--lr 1e-5 --name Insertion --learned-policy --new
+
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_transfer_cube_scripted/policy_best.ckpt ./sim_transfer_cube_scripted
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_transfer_cube_scripted/policy_last.ckpt ./sim_transfer_cube_scripted
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_transfer_cube_scripted/dataset_stats.pkl ./sim_transfer_cube_scripted
+
+
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_insertion_scripted/policy_best.ckpt ./sim_insertion_scripted
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_insertion_scripted/policy_last.ckpt ./sim_insertion_scripted
+scp tonyzhao@iris-ws-12.stanford.edu:/scr2/tonyzhao/train_logs/sim_insertion_scripted/dataset_stats.pkl ./sim_insertion_scripted
+
+#######################################
 
 # food prep
 python3 imitate_episodes.py \

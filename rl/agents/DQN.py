@@ -26,7 +26,7 @@ class DQNAgent:
         self.batch_size = batch_size
         self.lambda_ = lambda_
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(" if torch.cuda.is_available() else "cpu")
 
         self.q_network = self._build_network().to(self.device)
         self.target_network = self._build_network().to(self.device)

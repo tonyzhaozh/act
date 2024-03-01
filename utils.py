@@ -106,7 +106,7 @@ def sample_insertion_pose():
 
 def sample_teabag_pose():
     cube_pose = np.array([0.15, 0.5, 0.05, 1, 0, 0, 0])
-    random_scale = 0.05
+    random_scale = 0.02
     noise = np.concatenate(
         (np.random.uniform(low=-random_scale, high=random_scale, size=(2,)), np.array([0, 0, 0, 0, 0])))
     cube_pose += noise

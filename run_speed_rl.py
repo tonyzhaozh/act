@@ -1,4 +1,4 @@
-import time
+import time, random
 
 from policy_speed_env import create_speed_env
 #from rl.agents.DQN import DQNAgent
@@ -14,7 +14,14 @@ e = IPython.embed
 
 def main(args):
     mode = 'learned' if args['learned_policy'] else 'scripted'
-    run(mode, args, is_eval=args['eval'])
+    sweep = args['sweep']
+    is_eval = args['eval']
+    if sweep != -1 and not is_eval:
+        for i in range(sweep):
+            args['seed'] = random.randint(0, 256)
+            run(mode, args, is_eval=is_eval)
+    else:     
+        run(mode, args, is_eval=is_eval)
 
 def run(mode='scripted', args=None, is_eval = False):
     ######################################################
@@ -23,11 +30,14 @@ def run(mode='scripted', args=None, is_eval = False):
     name = args['name']
 
     # training
-    num_frames = 4000000
+    num_frames = 2000000
     batch_size = 256
 
     # RL params
     frame_skip = 10
+    frame_stack_state = 5
+    frame_stack_obs = 1
+
     gamma = 0.99
     memory_size = 2000000
     target_update = 50
@@ -36,14 +46,16 @@ def run(mode='scripted', args=None, is_eval = False):
     lr = args['lr']
 
     # env params
-    use_detailed_speed_profile = False
+    use_detailed_speed_profile = True
     if not use_detailed_speed_profile:
         speed_param = (0.5, 0.5, 5)  # min_speed, speed_slot_val, slot_num
         high_speed = speed_param[0] + speed_param[1] * (speed_param[2] - 1)
         speed_slots = None
     else:
         speed_param = (None, None, 4)
-        speed_slots = [1.0, 1.5, 2.0, 4.0]
+        speed_slots = [1.5, 2.0, 3.0, 4.5]
+        #speed_slots = [1.75, 2.0, 2.5, 4.5]
+        #speed_slots = [0.5, 1.0, 1.5, 2.0, 2.5]
         high_speed = speed_slots[-1]
 
     # no speed
@@ -92,13 +104,20 @@ def run(mode='scripted', args=None, is_eval = False):
         is_sim = False
 
     # saving
-    ckpt_save_freq = 10000 if is_sim else 500
+    ckpt_save_freq = 1000 if is_sim else 500
 
     # others
-    disable_render = not is_eval and not args["onscreen_render"]
+    use_image_obs = True
+    image_encoder = "resnet_pretrained"
+    #image_encoder = "resnet_random"
+    #image_encoder = "BYOL"
+    #image_encoder = None
+
+
+    disable_render = not is_eval and not args["onscreen_render"] and not (mode == "scripted" and use_image_obs)
     disable_random = False
-    disable_env_state = False
-    load_model = True and not args["new"]
+    disable_env_state = True
+    load_model = not args["new"]
     num_tests = 1
 
     # name
@@ -107,18 +126,32 @@ def run(mode='scripted', args=None, is_eval = False):
         print("Using random")
         name += "_Rand005"
     if speed_param != (1.0, 0.5, 5):
-        name += f"_vmax{high_speed}-{speed_param[2]}"
+        if speed_slots is not None:
+            name +=  f"_{speed_slots}"
+        else:
+            name += f"_vmax{high_speed}-{speed_param[2]}"
     if disable_env_state:
         name += "_no_envs"
+    if frame_stack_state > 1:
+        name += f"_state_stack{frame_stack_state}"
     if hidden_dim != 256:
         name += f"_dim{hidden_dim}"
+    if use_image_obs:
+        name += "_image_obs_" + image_encoder
+        if frame_stack_obs > 1:
+            name += f"_stack{frame_stack_obs}"
+
+        
 
     if args is not None:
         name = args["task_name"] + '_' + name
         is_sim = args["task_name"][:4] == "sim_"
     name += f"_seed{seed}"
 
-    model_path = f"/scr2/tonyzhao/dynamic_train_logs/{name}"
+    if is_eval:
+        name += "_eval"
+
+    model_path = f"/scr/tonyzhao/dynamic_train_logs/{name}"
     print(f'{model_path=}')
 
     ######################################################
@@ -128,17 +161,22 @@ def run(mode='scripted', args=None, is_eval = False):
 
     DISABLE_RENDER[0] = disable_render
     DISABLE_RANDOM[0] = disable_random
+
     if mode == 'scripted':
         env = create_speed_env( mode, None, task_name=args['task_name'],
-            reward_fn=reward_fn, use_parallel=False,
-            use_env_state= not disable_env_state,
+            reward_fn=reward_fn, use_parallel=False, 
+            use_obs = use_image_obs, image_encoder = image_encoder,
+            use_env_state= not disable_env_state, 
+            frame_stack_state = frame_stack_state, frame_stack_obs = frame_stack_obs,
             onscreen_render= is_eval or args["onscreen_render"],
             speed_param=speed_param, speed_slots=speed_slots,
         )
     elif mode == 'learned':
         env = create_speed_env( mode, args, task_name=args['task_name'],
             reward_fn=reward_fn, use_parallel=False,
+            use_obs = use_image_obs, image_encoder = image_encoder,
             use_env_state= not disable_env_state,
+            frame_stack_state = frame_stack_state, frame_stack_obs = frame_stack_obs,
             onscreen_render = is_eval, save_video=is_eval,
             speed_param = speed_param, speed_slots = speed_slots,
         )
@@ -160,7 +198,7 @@ def run(mode='scripted', args=None, is_eval = False):
                      log_dir="logs",
                      model_path = model_path,
                      is_sim = is_sim,
-                     exploration_steps=1000 if not load_model and not is_eval else 0
+                     exploration_steps=5000 if not load_model and not is_eval else 0
                      )
 
     if not is_eval:
@@ -199,6 +237,9 @@ if __name__ == '__main__':
     parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
     parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
     parser.add_argument('--name', action='store', type=str, help='name', required=True)
+
+    parser.add_argument('--sweep', action='store', type=int, default=-1, required=False)
+
 
     # eval
     parser.add_argument('--eval', action='store_true')
