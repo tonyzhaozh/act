@@ -12,15 +12,15 @@ from pathlib import Path, PurePath
 
 def plot_logs(logs, fields=('class_error', 'loss_bbox_unscaled', 'mAP'), ewm_col=0, log_name='log.txt'):
     '''
-    Function to plot specific fields from training log(s). Plots both training and test results.
+    Function to plot specific fields from training log(s). Plots both training and tests results.
 
     :: Inputs - logs = list containing Path objects, each pointing to individual dir with a log file
-              - fields = which results to plot from each log file - plots both training and test for each field.
+              - fields = which results to plot from each log file - plots both training and tests for each field.
               - ewm_col = optional, which column to use as the exponential weighted smoothing of the plots
               - log_name = optional, name of log file if different than default 'log.txt'.
 
     :: Outputs - matplotlib plots of results in fields, color coded for each log file.
-               - solid lines are training results, dashed lines are test results.
+               - solid lines are training results, dashed lines are tests results.
 
     '''
     func_name = "plot_utils.py::plot_logs"

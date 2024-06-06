@@ -9,11 +9,13 @@ import torch.nn.functional as F
 import torchvision
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping, Optional
 
 from util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
+from .resnet_film import resnet18 as resnet18_film
+from .resnet_film import resnet34 as resnet34_film
 
 import IPython
 e = IPython.embed
@@ -96,12 +98,75 @@ class Backbone(BackboneBase):
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
 
+# ====  ResNet Backbone ====
+class ResNetFilmBackbone(nn.Module):
+    def __init__(self, embedding_name: str, pretrained: bool = False,
+                 film_config: Optional[Mapping[str, Any]] = None):
+        super().__init__()
+        self._pretrained = pretrained
+        weights = 'IMAGENET1K_V1' if pretrained else None
+        if embedding_name in ('resnet34_film', 'resnet34'):
+            backbone = resnet34_film(weights=weights, film_config=film_config, pretrained=pretrained)
+            embedding_dim = 512
+        elif embedding_name in ('resnet18_film', 'resnet18'):
+            backbone = resnet18_film(weights=weights, film_config=film_config, pretrained=pretrained)
+            embedding_dim = 512
+        else:
+            raise NotImplementedError
+
+        # remove the last two layers of resnet
+        self.resnet_film_model = backbone
+        self.resnet_film_model.fc = nn.Identity()
+        self.resnet_film_model.avgpool = nn.Identity()
+
+        self._embedding_dim = embedding_dim
+
+        self.num_channels = self._embedding_dim
+
+        # FiLM config
+        self.film_config = film_config
+        if film_config is not None and film_config['use']:
+            film_models = []
+            for layer_idx, num_blocks in enumerate(self.resnet_film_model.layers):
+                if layer_idx in film_config['use_in_layers']:
+                    num_planes = self.resnet_film_model.film_planes[layer_idx]
+                    film_model_layer = nn.Linear(
+                        film_config['task_embedding_dim'], num_blocks * 2 * num_planes)
+                else:
+                    film_model_layer = None
+                film_models.append(film_model_layer)
+
+            self.film_models = nn.ModuleList(film_models)
+
+    def forward(self, x, texts: Optional[List[str]] = None, task_emb: Optional[torch.Tensor] = None, **kwargs):
+        film_outputs = None
+        if self.film_config is not None and self.film_config['use']:
+            film_outputs = []
+            for layer_idx, num_blocks in enumerate(self.resnet_film_model.layers):
+                if self.film_config['use'] and self.film_models[layer_idx] is not None:
+                    film_features = self.film_models[layer_idx](task_emb)
+                else:
+                    film_features = None
+                film_outputs.append(film_features)
+        return self.resnet_film_model(x, film_features=film_outputs, flatten=False)
+
+    @property
+    def embed_dim(self):
+        return self._embedding_dim
+
+
 class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
-    def forward(self, tensor_list: NestedTensor):
-        xs = self[0](tensor_list)
+    def forward(self, tensor_list: NestedTensor, task_emb: Optional[Any] = None):
+        if task_emb is not None:
+            xs = self[0](tensor_list, task_emb=task_emb)
+            # Make a dictionary out of the last layer outputs since we don't have IntermediateLayerGetter
+            xs = {'0': xs}
+        else:
+            xs = self[0](tensor_list)
+            xs = {'0': xs}
         out: List[NestedTensor] = []
         pos = []
         for name, x in xs.items():
@@ -117,6 +182,19 @@ def build_backbone(args):
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
     backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
+    model = Joiner(backbone, position_embedding)
+    model.num_channels = backbone.num_channels
+    return model
+
+def build_film_backbone(args):
+    position_embedding = build_position_encoding(args)
+    film_config = {
+        'use': True,
+        'use_in_layers': [1, 2, 3],
+        'task_embedding_dim': 512,
+        'film_planes': [64, 128, 256, 512],
+    }
+    backbone = ResNetFilmBackbone(args.backbone, film_config=film_config)
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
     return model
