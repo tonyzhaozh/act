@@ -2,11 +2,11 @@ import numpy as np
 import collections
 import os
 
-from constants import DT, XML_DIR, START_ARM_POSE
-from constants import PUPPET_GRIPPER_POSITION_CLOSE
-from constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
-from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
-from constants import PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
+from detr.experiment_configs.sim_constants import DT, XML_DIR, START_ARM_POSE
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_POSITION_CLOSE
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
 
 from utils import sample_box_pose, sample_insertion_pose
 from dm_control import mujoco

@@ -1,0 +1,20 @@
+FROM continuumio/miniconda3
+RUN conda create -n aloha python=3.10
+
+# Set the working directory
+WORKDIR /app
+# Copy the requirements file from the local folder to the container
+COPY requirements.txt /app/requirements.txt
+
+ENV DATA /workspace
+
+
+RUN /bin/bash -c "source activate aloha && \
+            pip install -r /app/requirements.txt"
+
+WORKDIR /workspace/act/detr
+
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+
+
+CMD ["bash"]

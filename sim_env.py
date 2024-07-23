@@ -6,11 +6,11 @@ from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
 
-from constants import DT, XML_DIR, START_ARM_POSE
-from constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
-from constants import MASTER_GRIPPER_POSITION_NORMALIZE_FN
-from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
-from constants import PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
+from detr.experiment_configs.sim_constants import DT, XML_DIR, START_ARM_POSE
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
+from detr.experiment_configs.sim_constants import MASTER_GRIPPER_POSITION_NORMALIZE_FN
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
+from detr.experiment_configs.sim_constants import PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
 
 import IPython
 e = IPython.embed

@@ -5,7 +5,7 @@ import h5py
 import argparse
 
 import matplotlib.pyplot as plt
-from constants import DT
+from detr.experiment_configs.sim_constants import DT
 
 import IPython
 e = IPython.embed

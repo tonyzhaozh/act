@@ -30,6 +30,11 @@ def get_args_parser():
                         help="Type of positional embedding to use on top of the image features")
     parser.add_argument('--camera_names', default=[], type=list, # will be overridden
                         help="A list of camera names")
+    
+    parser.add_argument('--statedim', type=int, default=9,# will be overridden
+                        help="statedim")
+    parser.add_argument('--actiondim', type=int, default=10, # will be overridden
+                        help="actiondim")
 
     # * Transformer
     parser.add_argument('--enc_layers', default=4, type=int, # will be overridden
@@ -56,6 +61,7 @@ def get_args_parser():
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--onscreen_render', action='store_true')
     parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
+    parser.add_argument('--ckpt_name', action='store', type=str, help='ckpt_name', required=False)
     parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
     parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
     parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
@@ -63,6 +69,9 @@ def get_args_parser():
     parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+    parser.add_argument('--run_name', action='store', type=str, help='run_name', required=True)
+
+    parser.add_argument('--wandb_mode', type=str, default='online', help='wandb mode') # online, disabled
 
     return parser
 
