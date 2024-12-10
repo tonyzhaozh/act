@@ -1,4 +1,6 @@
 # ACT: Action Chunking with Transformers
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftonyzhaozh%2Fact.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftonyzhaozh%2Fact?ref=badge_shield)
+
 
 ### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
 TL;DR: if your ACT policy is jerky or pauses in the middle of an episode, just train for longer! Success rate and smoothness can improve way after loss plateaus.
@@ -87,3 +89,7 @@ You can also add ``--onscreen_render`` to see real-time rendering during evaluat
 For real-world data where things can be harder to model, train for at least 5000 epochs or 3-4 times the length after the loss has plateaued.
 Please refer to [tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing) for more info.
 
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftonyzhaozh%2Fact.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftonyzhaozh%2Fact?ref=badge_large)
