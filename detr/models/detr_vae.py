@@ -133,7 +133,7 @@ class DETRVAE(nn.Module):
             qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)
             transformer_input = torch.cat([qpos, env_state], axis=1) # seq length = 2
-            hs = self.transformer(transformer_input, None, self.query_embed.weight, self.pos.weight)[0]
+            hs = self.transformer(transformer_input, None, self.query_embed.weight, self.pos.weight)[-1] # We only take the last layer output
         a_hat = self.action_head(hs)
         is_pad_hat = self.is_pad_head(hs)
         return a_hat, is_pad_hat, [mu, logvar]
