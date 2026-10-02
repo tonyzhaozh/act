@@ -249,9 +249,11 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         all_actions = policy(qpos, curr_image)
                     if temporal_agg:
                         all_time_actions[[t], t:t+num_queries] = all_actions
-                        actions_for_curr_step = all_time_actions[:, t]
-                        actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
-                        actions_for_curr_step = actions_for_curr_step[actions_populated]
+                        # Every query from this interval predicts timestep t.
+                        # Valid commands can contain zeros, so their numerical
+                        # values cannot indicate whether a chunk was populated.
+                        first_query = max(0, t - num_queries + 1)
+                        actions_for_curr_step = all_time_actions[first_query:t + 1, t]
                         k = 0.01
                         exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
                         exp_weights = exp_weights / exp_weights.sum()
@@ -433,3 +435,4 @@ if __name__ == '__main__':
     parser.add_argument('--temporal_agg', action='store_true')
     
     main(vars(parser.parse_args()))
+
