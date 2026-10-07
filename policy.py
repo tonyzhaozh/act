@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.transforms as transforms
@@ -76,7 +77,13 @@ def kl_divergence(mu, logvar):
     if logvar.data.ndimension() == 4:
         logvar = logvar.view(logvar.size(0), logvar.size(1))
 
-    klds = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+    # exp(logvar) - 1 - logvar is quadratic near the prior. Direct
+    # subtraction loses both its positive value and the small gradient.
+    small = logvar.clamp(min=-0.01, max=0.01)
+    series = small.pow(2) * (0.5 + small * (1 / 6 + small * (1 / 24 + small * (1 / 120 + small / 720))))
+    remainder = logvar.expm1() - logvar
+    remainder = torch.where(logvar.abs() < 0.01, series, remainder)
+    klds = 0.5 * (mu.pow(2) + remainder)
     total_kld = klds.sum(1).mean(0, True)
     dimension_wise_kld = klds.mean(0)
     mean_kld = klds.mean(1).mean(0, True)
