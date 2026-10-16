@@ -15,6 +15,13 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
+        # A batch needs one common action horizon, even when demonstrations
+        # end at different times. Only actual recorded samples affect statistics.
+        self.max_episode_len = 0
+        for episode_id in self.episode_ids:
+            path = os.path.join(dataset_dir, f'episode_{episode_id}.hdf5')
+            with h5py.File(path, 'r') as root:
+                self.max_episode_len = max(self.max_episode_len, root['/action'].shape[0])
         self.__getitem__(0) # initialize self.is_sim
 
     def __len__(self):
@@ -48,9 +55,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
 
         self.is_sim = is_sim
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)
+        padded_action = np.zeros((self.max_episode_len, original_action_shape[1]), dtype=np.float32)
         padded_action[:action_len] = action
-        is_pad = np.zeros(episode_len)
+        is_pad = np.zeros(self.max_episode_len)
         is_pad[action_len:] = 1
 
         # new axis for different cameras
@@ -87,18 +94,18 @@ def get_norm_stats(dataset_dir, num_episodes):
             action = root['/action'][()]
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
-    all_qpos_data = torch.stack(all_qpos_data)
-    all_action_data = torch.stack(all_action_data)
-    all_action_data = all_action_data
+    all_qpos_data = torch.cat(all_qpos_data, dim=0)
+    all_action_data = torch.cat(all_action_data, dim=0)
 
     # normalize action data
-    action_mean = all_action_data.mean(dim=[0, 1], keepdim=True)
-    action_std = all_action_data.std(dim=[0, 1], keepdim=True)
+    action_mean = all_action_data.mean(dim=0, keepdim=True)
+    # Keep the sample estimator for multiple frames; a singleton has zero variance.
+    action_std = all_action_data.std(dim=0, keepdim=True, unbiased=all_action_data.shape[0] > 1)
     action_std = torch.clip(action_std, 1e-2, np.inf) # clipping
 
     # normalize qpos data
-    qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
-    qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
+    qpos_mean = all_qpos_data.mean(dim=0, keepdim=True)
+    qpos_std = all_qpos_data.std(dim=0, keepdim=True, unbiased=all_qpos_data.shape[0] > 1)
     qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
 
     stats = {"action_mean": action_mean.numpy().squeeze(), "action_std": action_std.numpy().squeeze(),
